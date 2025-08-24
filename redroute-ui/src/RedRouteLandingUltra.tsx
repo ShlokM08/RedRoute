@@ -1,6 +1,14 @@
 import React, { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import {
+  motion,
+  useMotionValue,
+  useSpring,
+  useTransform,
+  useScroll,
+  useInView,
+  animate,
+} from "framer-motion";
 import { Button } from "./components/ui/button";
 import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
@@ -11,25 +19,26 @@ import {
   Star,
   Zap,
   Play,
-  ChevronRight,
+  ChevronUp,
   LogOut,
+  Sparkles,
+  TimerReset,
+  ShieldCheck,
 } from "lucide-react";
 
-// --- LOCAL IMAGES ---
+// --- LOCAL IMAGES (adjust extensions if yours differ) ---
 import hotel1 from "./assets/images/featured_hotel.avif";
 import loft1 from "./assets/images/featured_loft.avif";
 import theatreImg from "./assets/images/event_theatre.avif";
 import villa1 from "./assets/images/featured_villa.jpeg";
 import arenaImg from "./assets/images/event_arena.jpeg";
 import rooftopImg from "./assets/images/event_rooftop.jpeg";
-// --------------------
+// --------------------------------------------------------
 
 const RR = { red: "#E50914" } as const;
 
 /* ---------------------------------- UTIL ---------------------------------- */
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 /* --------------------------- KINETIC HEADLINE ------------------------------ */
 function Kinetic({ text, className = "" }: { text: string; className?: string }) {
@@ -94,15 +103,12 @@ function TiltCard({ children }: { children: React.ReactNode }) {
 
   function onMove(e: React.MouseEvent<HTMLDivElement>) {
     const el = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - el.left) / el.width;  // 0..1
-    const y = (e.clientY - el.top) / el.height;  // 0..1
-    // rotate around center, small range for elegance
+    const x = (e.clientX - el.left) / el.width;
+    const y = (e.clientY - el.top) / el.height;
     ry.set(clamp((x - 0.5) * 16, -8, 8));
     rx.set(clamp(-(y - 0.5) * 16, -8, 8));
   }
-  function onLeave() {
-    rx.set(0); ry.set(0);
-  }
+  function onLeave() { rx.set(0); ry.set(0); }
 
   return (
     <motion.div
@@ -115,6 +121,18 @@ function TiltCard({ children }: { children: React.ReactNode }) {
   );
 }
 
+/* ------------------------- SCROLL PROGRESS BAR ----------------------------- */
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 140, damping: 30, restDelta: 0.001 });
+  return (
+    <motion.div
+      className="fixed left-0 right-0 top-0 z-[9999] h-1 origin-left bg-gradient-to-r from-red-600 via-white/80 to-red-600"
+      style={{ scaleX }}
+    />
+  );
+}
+
 /* ----------------------------- HERO SECTION -------------------------------- */
 function Hero() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -124,6 +142,8 @@ function Hero() {
   const my = useMotionValue(0.5);
   const pTitle = useTransform([mx, my], ([x, y]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
   const pPanel = useTransform([mx, my], ([x, y]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
+  const glowX = useTransform(mx, (v) => `${v * 100}%`);
+  const glowY = useTransform(my, (v) => `${v * 100}%`);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -156,7 +176,6 @@ function Hero() {
           preload="auto"
           style={{ filter: "brightness(1.28) contrast(1.07) saturate(1.18)" }}
         />
-        {/* light overlay + brand glows */}
         <div className="absolute inset-0 -z-10 bg-black/28" />
         <div className="absolute inset-0 -z-10 [background:radial-gradient(900px_circle_at_20%_10%,rgba(229,9,20,0.20),transparent_60%),radial-gradient(900px_circle_at_85%_15%,rgba(255,107,107,0.16),transparent_65%)]" />
 
@@ -171,19 +190,13 @@ function Hero() {
         {/* INNER BANNER (glass) */}
         <div className="absolute inset-0 grid place-items-center px-4" onMouseMove={onMove}>
           <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-hidden">
-            {/* cursor glow */}
+            {/* cursor glow (smaller + softer) */}
             <motion.div
-              className="pointer-events-none absolute -inset-16 rounded-[40px] opacity-70"
-              style={{
-                background:
-                  "radial-gradient(240px 240px at calc(var(--x,50%)) calc(var(--y,50%)), rgba(229,9,20,0.18), transparent 60%)",
-              }}
-              // update css vars from motion values
-              animate={{
-                ["--x" as any]: useTransform(mx, (v) => `${v * 100}%`),
-                ["--y" as any]: useTransform(my, (v) => `${v * 100}%`),
-              }}
+              className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full
+                         bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
+              style={{ left: glowX, top: glowY, translateX: "-50%", translateY: "-50%" }}
             />
+
             <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
               {/* LEFT: headline + actions */}
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
@@ -193,7 +206,9 @@ function Hero() {
                 </p>
                 <div className="flex flex-wrap items-center gap-2 md:gap-3">
                   <MagneticButton />
-                 
+                  <Button variant="outline" className="h-10 rounded-xl px-4 text-sm">
+                    <Play className="mr-2 size-4" /> Watch 30s Reel
+                  </Button>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] md:text-sm text-white/75">
                   <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Trusted by 120k+</div>
@@ -269,16 +284,68 @@ function MagneticButton() {
     <motion.button
       onMouseMove={onMove}
       onMouseLeave={onLeave}
-      style={{ x, y }}
       whileTap={{ scale: 0.98 }}
+      style={{ x, y, background: RR.red }}
       className="group relative inline-flex items-center gap-2 overflow-hidden rounded-2xl px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(229,9,20,0.45)]"
-      style={{ background: RR.red } as any}
     >
       <span className="relative z-10 flex items-center gap-2">
         <Zap className="size-4" /> Hot Now!
       </span>
       <span className="pointer-events-none absolute inset-0 -translate-x-full bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.28),transparent)] transition-transform duration-700 group-hover:translate-x-0" />
     </motion.button>
+  );
+}
+
+/* ------------------------------- STATS STRIP ------------------------------- */
+function CountUp({ value }: { value: number }) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: "-40% 0px" });
+  const mv = useMotionValue(0);
+  const rounded = useTransform(mv, (v) => Math.round(v).toLocaleString());
+
+  useEffect(() => {
+    if (inView) {
+      const controls = animate(mv, value, { duration: 1.2, ease: "easeOut" });
+      return () => controls.stop();
+    }
+  }, [inView, value, mv]);
+
+  return <motion.span ref={ref}>{rounded}</motion.span>;
+}
+
+function StatsStrip() {
+  const items = [
+    { icon: <Sparkles className="size-5" />, label: "Experiences booked", value: 128_432 },
+    { icon: <TimerReset className="size-5" />, label: "Avg. checkout time", value: 28 },
+    { icon: <ShieldCheck className="size-5" />, label: "Hotels partnered", value: 960 },
+    { icon: <Star className="size-5" />, label: "Avg. rating", value: 4.9 },
+  ];
+  return (
+    <section className="px-6 pt-10 text-white">
+      <div className="mx-auto max-w-7xl grid grid-cols-2 gap-4 md:grid-cols-4">
+        {items.map((it, i) => (
+          <div key={i} className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm flex items-center gap-3">
+            <div className="grid place-items-center rounded-xl bg-white/10 p-2">{it.icon}</div>
+            <div>
+              <div className="text-xl font-bold">
+                {it.label.includes("rating") ? (
+                  <>
+                    <CountUp value={it.value} />★
+                  </>
+                ) : it.label.includes("time") ? (
+                  <>
+                    <CountUp value={it.value} />s
+                  </>
+                ) : (
+                  <CountUp value={it.value} />
+                )}
+              </div>
+              <div className="text-xs text-white/70">{it.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -290,7 +357,7 @@ function Featured() {
     { title: "Downtown Creative Loft", img: loft1, rating: 4.7, price: 139, tag: "Value" },
   ];
   return (
-    <section id="gallery" className="px-6 py-20 text-white">
+    <section id="gallery" className="px-6 py-16 text-white">
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex items-end justify-between">
           <div>
@@ -301,7 +368,7 @@ function Featured() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {items.map((it, i) => (
+          {items.map((it) => (
             <TiltCard key={it.title}>
               <Card className="group overflow-hidden">
                 <div className="relative overflow-hidden">
@@ -309,8 +376,10 @@ function Featured() {
                     src={it.img}
                     alt=""
                     className="h-60 w-full object-cover"
-                    whileHover={{ scale: 1.08 }}
-                    transition={{ type: "spring", stiffness: 120, damping: 14 }}
+                    initial={{ scale: 1.05 }}
+                    whileInView={{ scale: 1.12 }}
+                    transition={{ duration: 6, ease: "linear" }}
+                    whileHover={{ scale: 1.2 }}
                   />
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
                   <motion.div
@@ -346,6 +415,46 @@ function Featured() {
           ))}
         </div>
       </div>
+    </section>
+  );
+}
+
+/* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
+function KenBurnsShowcase() {
+  const slides = [
+    { img: arenaImg, title: "Arena Night", sub: "Citywide tour" },
+    { img: rooftopImg, title: "Rooftop Cinema", sub: "Fridays 8pm" },
+    { img: theatreImg, title: "Old Town Theatre", sub: "Matinee daily" },
+  ];
+  const seq = [...slides, ...slides];
+
+  return (
+    <section className="px-6 pb-16 text-white">
+      <div className="mx-auto max-w-7xl overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+        <div className="relative flex animate-[kbmarquee_30s_linear_infinite]">
+          {seq.map((s, i) => (
+            <div key={i} className="relative h-56 min-w-[70%] md:h-72 md:min-w-[40%] overflow-hidden">
+              <motion.img
+                src={s.img}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+                initial={{ scale: 1.05, x: 0 }}
+                whileInView={{ scale: 1.18, x: 15 }}
+                transition={{ duration: 10, ease: "linear" }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/0" />
+              <div className="absolute bottom-3 left-4">
+                <div className="text-sm text-white/80">{s.sub}</div>
+                <div className="text-xl font-semibold">{s.title}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <style>{`
+        @keyframes kbmarquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+        @media (prefers-reduced-motion: reduce) { .animate-[kbmarquee_30s_linear_infinite]{animation:none} }
+      `}</style>
     </section>
   );
 }
@@ -395,10 +504,47 @@ function EventStrip() {
   );
 }
 
+/* ---------------------------- Sticky Journey ------------------------------- */
+function StickyJourney() {
+  const steps = [
+    { title: "Search", body: "Pick a city, dates, and vibe. Our feed cuts like a trailer." },
+    { title: "Choose", body: "Hotels and events curated in real-time — with motion previews." },
+    { title: "Book", body: "Lightning checkout with saved details and Apple/Google Pay." },
+    { title: "Enjoy", body: "Live itinerary, updates, and loyalty perks unlock on arrival." },
+  ];
+  return (
+    <section className="px-6 pb-24 text-white">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 md:grid-cols-3">
+        <div className="md:col-span-1 md:sticky md:top-20">
+          <h2 className="text-3xl font-bold">How it works</h2>
+          <p className="text-white/70">A quick cut of the journey — framed like scenes.</p>
+        </div>
+        <div className="md:col-span-2 space-y-6">
+          {steps.map((s, i) => (
+            <motion.div
+              key={s.title}
+              initial={{ opacity: 0, y: 20, scale: 0.98 }}
+              whileInView={{ opacity: 1, y: 0, scale: 1 }}
+              viewport={{ once: true, margin: "-10% 0px" }}
+              transition={{ delay: i * 0.05 }}
+              className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur"
+            >
+              <div className="text-sm text-white/70">Scene {i + 1}</div>
+              <div className="text-xl font-semibold">{s.title}</div>
+              <div className="mt-1 text-white/80">{s.body}</div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ------------------------------- PAGE -------------------------------------- */
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
 
+  // Guard: if not logged in, bounce to sign-in
   useEffect(() => {
     if (!localStorage.getItem("rr_demo_user")) {
       navigate("/");
@@ -412,6 +558,8 @@ export default function RedRouteLandingUltra() {
 
   return (
     <div className="min-h-screen w-full bg-black font-sans">
+      <ScrollProgress />
+
       <button
         onClick={logout}
         className="fixed top-5 right-5 z-50 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 text-white hover:bg-white/20"
@@ -421,8 +569,11 @@ export default function RedRouteLandingUltra() {
       </button>
 
       <Hero />
+      <StatsStrip />
       <Featured />
+      <KenBurnsShowcase />
       <EventStrip />
+      <StickyJourney />
 
       <a
         href="#"
@@ -430,7 +581,7 @@ export default function RedRouteLandingUltra() {
         style={{ background: RR.red }}
         title="Start your demo"
       >
-        <ChevronRight className="size-6 text-white" />
+        <ChevronUp  className="size-6 text-white" />
       </a>
     </div>
   );
