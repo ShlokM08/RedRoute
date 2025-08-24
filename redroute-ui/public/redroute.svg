@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF2A3A"></stop>
+      <stop offset="1" stop-color="#B10610"></stop>
+    </linearGradient>
+  </defs>
+
+  <!-- Map pin -->
+  <path d="M32 6c-9.94 0-18 8.06-18 18 0 12 18 34 18 34s18-22 18-34c0-9.94-8.06-18-18-18z" fill="url(#g)"></path>
+
+  <!-- subtle inner glow -->
+  <circle cx="32" cy="24" r="9" fill="#000" opacity=".12"></circle>
+
+  <!-- Lightning (RR = fast route) -->
+  <path d="M36 15L25 28h7l-2 12 11-13h-7l2-12z" fill="#fff"></path>
+</svg>
