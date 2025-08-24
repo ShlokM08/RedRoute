@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   motion,
@@ -8,6 +8,7 @@ import {
   useScroll,
   useInView,
   animate,
+  AnimatePresence,
 } from "framer-motion";
 import { Button } from "./components/ui/button";
 import { Card, CardContent } from "./components/ui/card";
@@ -20,6 +21,8 @@ import {
   Zap,
   Play,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   LogOut,
   Sparkles,
   TimerReset,
@@ -36,8 +39,6 @@ import rooftopImg from "./assets/images/event_rooftop.jpeg";
 // --------------------------------------------------------
 
 const RR = { red: "#E50914" } as const;
-
-/* ---------------------------------- UTIL ---------------------------------- */
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 /* --------------------------- KINETIC HEADLINE ------------------------------ */
@@ -108,7 +109,10 @@ function TiltCard({ children }: { children: React.ReactNode }) {
     ry.set(clamp((x - 0.5) * 16, -8, 8));
     rx.set(clamp(-(y - 0.5) * 16, -8, 8));
   }
-  function onLeave() { rx.set(0); ry.set(0); }
+  function onLeave() {
+    rx.set(0);
+    ry.set(0);
+  }
 
   return (
     <motion.div
@@ -130,6 +134,230 @@ function ScrollProgress() {
       className="fixed left-0 right-0 top-0 z-[9999] h-1 origin-left bg-gradient-to-r from-red-600 via-white/80 to-red-600"
       style={{ scaleX }}
     />
+  );
+}
+
+/* ----------------------- THEMED CALENDAR POPOVER --------------------------- */
+type DayCell = { date: Date; currentMonth: boolean; isToday: boolean };
+
+function useMonthMatrix(year: number, month: number) {
+  return useMemo(() => {
+    // First day of month
+    const first = new Date(year, month, 1);
+    const startWeekday = (first.getDay() + 6) % 7; // Mon=0
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const prevMonthDays = new Date(year, month, 0).getDate();
+
+    const cells: DayCell[] = [];
+    // Leading cells from prev month
+    for (let i = startWeekday - 1; i >= 0; i--) {
+      const d = prevMonthDays - i;
+      const date = new Date(year, month - 1, d);
+      cells.push({ date, currentMonth: false, isToday: isSameDate(date, new Date()) });
+    }
+    // Current month
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(year, month, d);
+      cells.push({ date, currentMonth: true, isToday: isSameDate(date, new Date()) });
+    }
+    // Trailing cells (fill to complete weeks)
+    while (cells.length % 7 !== 0) {
+      const last = cells[cells.length - 1]?.date ?? new Date(year, month, 1);
+      const date = new Date(last);
+      date.setDate(date.getDate() + 1);
+      cells.push({ date, currentMonth: false, isToday: isSameDate(date, new Date()) });
+    }
+    return cells;
+  }, [year, month]);
+}
+
+const monthName = (y: number, m: number) =>
+  new Date(y, m, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
+
+const isSameDate = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate();
+
+const isWithin = (d: Date, a: Date | null, b: Date | null) => {
+  if (!a || !b) return false;
+  const t = +new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const t1 = +new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const t2 = +new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  const [min, max] = t1 <= t2 ? [t1, t2] : [t2, t1];
+  return t > min && t < max;
+};
+
+const fmtShort = (d: Date) =>
+  d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+function CalendarPopover() {
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLButtonElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
+
+  const now = new Date();
+  const [viewY, setViewY] = useState(now.getFullYear());
+  const [viewM, setViewM] = useState(now.getMonth());
+
+  const [start, setStart] = useState<Date | null>(null);
+  const [end, setEnd] = useState<Date | null>(null);
+
+  const cells = useMonthMatrix(viewY, viewM);
+
+  const toggle = () => setOpen((o) => !o);
+  const close = () => setOpen(false);
+
+  const onPrev = () => {
+    const m = viewM - 1;
+    if (m < 0) {
+      setViewM(11);
+      setViewY((y) => y - 1);
+    } else setViewM(m);
+  };
+  const onNext = () => {
+    const m = viewM + 1;
+    if (m > 11) {
+      setViewM(0);
+      setViewY((y) => y + 1);
+    } else setViewM(m);
+  };
+
+  const onPick = (d: Date) => {
+    if (!start || (start && end)) {
+      setStart(d);
+      setEnd(null);
+    } else {
+      // pick an end
+      setEnd(d);
+    }
+  };
+
+  const label =
+    start && end
+      ? `${fmtShort(start)} — ${fmtShort(end)}`
+      : start
+      ? `${fmtShort(start)} — …`
+      : "Select dates";
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (!open) return;
+      const target = e.target as Node;
+      if (
+        popRef.current &&
+        !popRef.current.contains(target) &&
+        anchorRef.current &&
+        !anchorRef.current.contains(target)
+      ) {
+        close();
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Weeks header Mon..Sun
+  const dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  const isSelected = useCallback(
+    (d: Date) =>
+      (start && isSameDate(d, start)) || (end && isSameDate(d, end)),
+    [start, end]
+  );
+
+  return (
+    <div className="relative">
+      <button
+        ref={anchorRef}
+        type="button"
+        onClick={toggle}
+        className="h-10 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-left text-sm text-white/90 hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-red-600/60"
+      >
+        {label}
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            ref={popRef}
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 240, damping: 20 }}
+            className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg-[rgba(0,0,0,0.7)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.06]">
+              <button
+                onClick={onPrev}
+                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
+                aria-label="Previous month"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <div className="text-sm font-semibold">{monthName(viewY, viewM)}</div>
+              <button
+                onClick={onNext}
+                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
+                aria-label="Next month"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+
+            <div className="px-3 py-2">
+              {/* DOW header */}
+              <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-white/60 mb-1">
+                {dow.map((d) => (
+                  <div key={d} className="py-1">{d}</div>
+                ))}
+              </div>
+
+              {/* Day cells */}
+              <div className="grid grid-cols-7 gap-1">
+                {cells.map(({ date, currentMonth, isToday }, idx) => {
+                  const selected = isSelected(date);
+                  const inRange = isWithin(date, start, end);
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => onPick(date)}
+                      className={[
+                        "relative h-10 rounded-lg text-sm",
+                        "border border-white/10",
+                        currentMonth ? "text-white/90" : "text-white/40",
+                        "bg-white/5 hover:bg-white/10",
+                        selected ? "bg-[#E50914] text-white border-[#E50914]" : "",
+                        inRange ? "bg-white/10" : "",
+                        isToday && !selected ? "ring-1 ring-white/30" : "",
+                      ].join(" ")}
+                      title={date.toDateString()}
+                    >
+                      {date.getDate()}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Footer hint */}
+              <div className="mt-2 flex items-center justify-between text-[11px] text-white/60 px-1">
+                <span>Pick start, then end</span>
+                <button
+                  className="underline hover:text-white"
+                  onClick={() => {
+                    setStart(null);
+                    setEnd(null);
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -200,13 +428,15 @@ function Hero() {
             <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
               {/* LEFT: headline + actions */}
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
-                <Kinetic text="Welcome to RedRoute" className="text-4xl md:text-6xl" />
+                <Kinetic text="RedRoute is the show." className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
-                  Hotels, Events, Experiences.Your gateway to the time of your life anywhere, anytime.
+                  Hotels. Events. Experiences. A kinetic interface that moves like a trailer — every scroll feels like a scene cut.
                 </p>
                 <div className="flex flex-wrap items-center gap-2 md:gap-3">
                   <MagneticButton />
-                 
+                  <Button variant="outline" className="h-10 rounded-xl px-4 text-sm">
+                    <Play className="mr-2 size-4" /> Watch 30s Reel
+                  </Button>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] md:text-sm text-white/75">
                   <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Trusted by 120k+</div>
@@ -222,7 +452,8 @@ function Hero() {
                     <Input className="h-10 text-sm focus:ring-2 focus:ring-red-600/60 focus:outline-none" placeholder="Where to?" />
                   </Field>
                   <Field icon={<Calendar className="size-4" />} label="Dates">
-                    <Input className="h-10 text-sm focus:ring-2 focus:ring-red-600/60 focus:outline-none" placeholder="Aug 24 → Aug 27" />
+                    {/* Themed calendar popover */}
+                    <CalendarPopover />
                   </Field>
                   <Field icon={<User className="size-4" />} label="Guests">
                     <Input className="h-10 text-sm focus:ring-2 focus:ring-red-600/60 focus:outline-none" placeholder="2 Adults" />
@@ -344,51 +575,6 @@ function StatsStrip() {
         ))}
       </div>
     </section>
-  );
-}
-function DateRangeFields() {
-  const fmt = (d: Date) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  };
-  const addDays = (d: Date, n: number) => {
-    const t = new Date(d);
-    t.setDate(t.getDate() + n);
-    return t;
-  };
-
-  const today = new Date();
-  const [checkIn, setCheckIn] = useState<string>(fmt(today));
-  const [checkOut, setCheckOut] = useState<string>(fmt(addDays(today, 3)));
-
-  const onCheckIn = (v: string) => {
-    setCheckIn(v);
-    // keep checkout at least +1 day
-    const inD = new Date(v);
-    const outD = new Date(checkOut);
-    if (outD <= inD) setCheckOut(fmt(addDays(inD, 1)));
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        type="date"
-        value={checkIn}
-        min={fmt(today)}
-        onChange={(e) => onCheckIn(e.target.value)}
-        className="w-full h-10 rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-red-600/60"
-      />
-      <span className="text-white/50">→</span>
-      <input
-        type="date"
-        value={checkOut}
-        min={fmt(addDays(new Date(checkIn), 1))}
-        onChange={(e) => setCheckOut(e.target.value)}
-        className="w-full h-10 rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-red-600/60"
-      />
-    </div>
   );
 }
 
@@ -555,7 +741,32 @@ function StickyJourney() {
     { title: "Book", body: "Lightning checkout with saved details and Apple/Google Pay." },
     { title: "Enjoy", body: "Live itinerary, updates, and loyalty perks unlock on arrival." },
   ];
- 
+  return (
+    <section className="px-6 pb-24 text-white">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 md:grid-cols-3">
+        <div className="md:col-span-1 md:sticky md:top-20">
+          <h2 className="text-3xl font-bold">How it works</h2>
+          <p className="text-white/70">A quick cut of the journey — framed like scenes.</p>
+        </div>
+        <div className="md:col-span-2 space-y-6">
+          {steps.map((s, i) => (
+            <motion.div
+              key={s.title}
+              initial={{ opacity: 0, y: 20, scale: 0.98 }}
+              whileInView={{ opacity: 1, y: 0, scale: 1 }}
+              viewport={{ once: true, margin: "-10% 0px" }}
+              transition={{ delay: i * 0.05 }}
+              className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur"
+            >
+              <div className="text-sm text-white/70">Scene {i + 1}</div>
+              <div className="text-xl font-semibold">{s.title}</div>
+              <div className="mt-1 text-white/80">{s.body}</div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 /* ------------------------------- PAGE -------------------------------------- */
@@ -593,14 +804,16 @@ export default function RedRouteLandingUltra() {
       <EventStrip />
       <StickyJourney />
 
-      <a
-        href="#"
+      {/* Up arrow: back to top */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
         className="fixed bottom-6 right-6 grid h-12 w-12 place-items-center rounded-full shadow-2xl"
         style={{ background: RR.red }}
-        title="Start your demo"
+        aria-label="Back to top"
+        title="Back to top"
       >
-        <ChevronUp  className="size-6 text-white" />
-      </a>
+        <ChevronUp className="size-6 text-white" />
+      </button>
     </div>
   );
 }
