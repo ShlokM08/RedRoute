@@ -19,7 +19,6 @@ import {
   User,
   Star,
   Zap,
-  Play,
   ChevronUp,
   ChevronLeft,
   ChevronRight,
@@ -377,8 +376,10 @@ function Hero() {
   // cursor glow & parallax
   const mx = useMotionValue(0.5);
   const my = useMotionValue(0.5);
-  const pTitle = useTransform([mx, my], ([x, y]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
-  const pPanel = useTransform([mx, my], ([x, y]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
+  const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
+
+  const pPanel = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
+
   const glowX = useTransform(mx, (v) => `${v * 100}%`);
   const glowY = useTransform(my, (v) => `${v * 100}%`);
 
@@ -784,7 +785,7 @@ export default function RedRouteLandingUltra() {
       <Featured />
       <KenBurnsShowcase />
       <EventStrip />
-      <StickyJourney />
+      
 
       {/* Up arrow: back to top */}
       <button
