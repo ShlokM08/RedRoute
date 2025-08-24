@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { Button } from "./components/ui/button";
 import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
@@ -19,27 +19,31 @@ import {
 import hotel1 from "./assets/images/featured_hotel.avif";
 import loft1 from "./assets/images/featured_loft.avif";
 import theatreImg from "./assets/images/event_theatre.avif";
-
-import villa1 from "./assets/images/featured_villa.jpeg";  // <-- changed to .jpeg
+import villa1 from "./assets/images/featured_villa.jpeg";
 import arenaImg from "./assets/images/event_arena.jpeg";
 import rooftopImg from "./assets/images/event_rooftop.jpeg";
 // --------------------
 
 const RR = { red: "#E50914" } as const;
 
-/* ---------- Kinetic headline (per-word) ---------- */
+/* ---------------------------------- UTIL ---------------------------------- */
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+/* --------------------------- KINETIC HEADLINE ------------------------------ */
 function Kinetic({ text, className = "" }: { text: string; className?: string }) {
   const words = text.split(" ");
-  let globalIndex = 0;
+  let idx = 0;
   return (
     <h1 className={`mx-auto text-center font-black leading-[1.05] tracking-tight ${className}`}>
-      {words.map((word, wi) => {
-        const letters = word.split("").map((ch, i) => {
-          const delay = 0.02 * (globalIndex++);
+      {words.map((w, wi) => {
+        const letters = w.split("").map((ch, i) => {
+          const delay = 0.02 * idx++;
           return (
             <motion.span
               key={`${wi}-${i}`}
-              initial={{ y: "1.3em", rotateX: -90, opacity: 0 }}
+              initial={{ y: "1.2em", rotateX: -90, opacity: 0 }}
               animate={{ y: 0, rotateX: 0, opacity: 1 }}
               transition={{ delay, type: "spring", stiffness: 250, damping: 20 }}
               className="inline-block [perspective:600px]"
@@ -60,7 +64,7 @@ function Kinetic({ text, className = "" }: { text: string; className?: string })
   );
 }
 
-/* ---------- Small field wrapper ---------- */
+/* ---------------------------- FIELD WRAPPER -------------------------------- */
 function Field({
   icon,
   label,
@@ -83,9 +87,43 @@ function Field({
   );
 }
 
-/* ---------- HERO (banner-in-banner with /s.mp4 video) ---------- */
+/* ----------------------------- TILT CARD ----------------------------------- */
+function TiltCard({ children }: { children: React.ReactNode }) {
+  const rx = useSpring(0, { stiffness: 120, damping: 12 });
+  const ry = useSpring(0, { stiffness: 120, damping: 12 });
+
+  function onMove(e: React.MouseEvent<HTMLDivElement>) {
+    const el = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - el.left) / el.width;  // 0..1
+    const y = (e.clientY - el.top) / el.height;  // 0..1
+    // rotate around center, small range for elegance
+    ry.set(clamp((x - 0.5) * 16, -8, 8));
+    rx.set(clamp(-(y - 0.5) * 16, -8, 8));
+  }
+  function onLeave() {
+    rx.set(0); ry.set(0);
+  }
+
+  return (
+    <motion.div
+      style={{ rotateX: rx, rotateY: ry, transformPerspective: 900 }}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/* ----------------------------- HERO SECTION -------------------------------- */
 function Hero() {
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // cursor glow & parallax
+  const mx = useMotionValue(0.5);
+  const my = useMotionValue(0.5);
+  const pTitle = useTransform([mx, my], ([x, y]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
+  const pPanel = useTransform([mx, my], ([x, y]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -96,6 +134,12 @@ function Hero() {
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
+
+  function onMove(e: React.MouseEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    mx.set((e.clientX - r.left) / r.width);
+    my.set((e.clientY - r.top) / r.height);
+  }
 
   return (
     <section className="relative text-white">
@@ -110,56 +154,71 @@ function Hero() {
           loop
           playsInline
           preload="auto"
-          style={{ filter: "brightness(1.25) contrast(1.06) saturate(1.18)" }}
+          style={{ filter: "brightness(1.28) contrast(1.07) saturate(1.18)" }}
         />
-        {/* lighter overlay so the video shows */}
-        <div className="absolute inset-0 -z-10 bg-black/30" />
-        <div className="absolute inset-0 -z-10 [background:radial-gradient(900px_circle_at_20%_10%,rgba(229,9,20,0.22),transparent_60%),radial-gradient(900px_circle_at_85%_15%,rgba(255,107,107,0.18),transparent_65%)]" />
+        {/* light overlay + brand glows */}
+        <div className="absolute inset-0 -z-10 bg-black/28" />
+        <div className="absolute inset-0 -z-10 [background:radial-gradient(900px_circle_at_20%_10%,rgba(229,9,20,0.20),transparent_60%),radial-gradient(900px_circle_at_85%_15%,rgba(255,107,107,0.16),transparent_65%)]" />
 
-        {/* INNER BANNER */}
-        <div className="absolute inset-0 grid place-items-center px-4">
-          <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8">
-            <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2">
+        {/* rotating beams */}
+        <div className="pointer-events-none absolute -left-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-25 mix-blend-screen">
+          <div className="h-full w-full animate-[spin_36s_linear_infinite] [background:conic-gradient(from_0deg_at_50%_50%,rgba(229,9,20,0.28),transparent_30%,rgba(255,255,255,0.14),transparent_60%,rgba(229,9,20,0.22),transparent_90%)]" />
+        </div>
+        <div className="pointer-events-none absolute -right-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-20 mix-blend-screen">
+          <div className="h-full w-full animate-[spin_48s_linear_infinite_reverse] [background:conic-gradient(from_140deg_at_50%_50%,rgba(255,255,255,0.12),transparent_25%,rgba(229,9,20,0.22),transparent_65%,rgba(255,255,255,0.12),transparent_95%)]" />
+        </div>
+
+        {/* INNER BANNER (glass) */}
+        <div className="absolute inset-0 grid place-items-center px-4" onMouseMove={onMove}>
+          <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-hidden">
+            {/* cursor glow */}
+            <motion.div
+              className="pointer-events-none absolute -inset-16 rounded-[40px] opacity-70"
+              style={{
+                background:
+                  "radial-gradient(240px 240px at calc(var(--x,50%)) calc(var(--y,50%)), rgba(229,9,20,0.18), transparent 60%)",
+              }}
+              // update css vars from motion values
+              animate={{
+                ["--x" as any]: useTransform(mx, (v) => `${v * 100}%`),
+                ["--y" as any]: useTransform(my, (v) => `${v * 100}%`),
+              }}
+            />
+            <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
               {/* LEFT: headline + actions */}
-              <div className="space-y-3 md:space-y-4">
+              <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
                 <Kinetic text="RedRoute is the show." className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
                   Hotels. Events. Experiences. A kinetic interface that moves like a trailer — every scroll feels like a scene cut.
                 </p>
                 <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                  <motion.button
-                    whileTap={{ scale: 0.98 }}
-                    className="group relative inline-flex items-center gap-2 overflow-hidden rounded-2xl px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(229,9,20,0.45)]"
-                    style={{ background: RR.red }}
-                  >
-                    <span className="relative z-10 flex items-center gap-2">
-                      <Zap className="size-4" /> Hot Now!
-                    </span>
-                    <span className="pointer-events-none absolute inset-0 -translate-x-full bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.2),transparent)] transition-transform duration-700 group-hover:translate-x-0" />
-                  </motion.button>
-                  
+                  <MagneticButton />
+                 
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] md:text-sm text-white/75">
                   <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Trusted by 120k+</div>
                   <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">4.9★ rating</div>
                   <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Lightning checkout</div>
                 </div>
-              </div>
+              </motion.div>
 
               {/* RIGHT: compact search */}
-              <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur">
+              <motion.div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur" style={{ transform: pPanel }}>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
                   <Field icon={<MapPin className="size-4" />} label="Destination">
-                    <Input className="h-10 text-sm" placeholder="Where to?" />
+                    <Input className="h-10 text-sm focus:ring-2 focus:ring-red-600/60 focus:outline-none" placeholder="Where to?" />
                   </Field>
                   <Field icon={<Calendar className="size-4" />} label="Dates">
-                    <Input className="h-10 text-sm" placeholder="Aug 24 → Aug 27" />
+                    <Input className="h-10 text-sm focus:ring-2 focus:ring-red-600/60 focus:outline-none" placeholder="Aug 24 → Aug 27" />
                   </Field>
                   <Field icon={<User className="size-4" />} label="Guests">
-                    <Input className="h-10 text-sm" placeholder="2 Adults" />
+                    <Input className="h-10 text-sm focus:ring-2 focus:ring-red-600/60 focus:outline-none" placeholder="2 Adults" />
                   </Field>
                   <div className="flex items-end">
-                    <Button className="h-10 w-full text-sm rounded-xl">Search</Button>
+                    <Button className="h-10 w-full text-sm rounded-xl relative overflow-hidden">
+                      <span className="relative z-10">Search</span>
+                      <span className="pointer-events-none absolute inset-0 translate-x-[-120%] bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] animate-[sheen_1.8s_linear_infinite]" />
+                    </Button>
                   </div>
                 </div>
 
@@ -172,19 +231,58 @@ function Hero() {
                     ))}
                   </div>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </div>
         </div>
 
-        {/* marquee keyframes */}
-        <style>{`@keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }`}</style>
+        {/* keyframes */}
+        <style>{`
+          @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes sheen { 0% { transform: translateX(-120%);} 100% { transform: translateX(120%);} }
+          @media (prefers-reduced-motion: reduce) {
+            .animate-[marquee_18s_linear_infinite] { animation: none !important; }
+            .animate-[spin_36s_linear_infinite], .animate-[spin_48s_linear_infinite_reverse] { animation: none !important; }
+          }
+        `}</style>
       </div>
     </section>
   );
 }
 
-/* ---------- Featured ---------- */
+/* ---------------------- Magnetic demo button with sheen -------------------- */
+function MagneticButton() {
+  const x = useSpring(0, { stiffness: 200, damping: 15 });
+  const y = useSpring(0, { stiffness: 200, damping: 15 });
+
+  function onMove(e: React.MouseEvent<HTMLButtonElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2);
+    const dy = e.clientY - (r.top + r.height / 2);
+    x.set(clamp(dx * 0.2, -12, 12));
+    y.set(clamp(dy * 0.2, -10, 10));
+  }
+  function onLeave() { x.set(0); y.set(0); }
+
+  return (
+    <motion.button
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+      style={{ x, y }}
+      whileTap={{ scale: 0.98 }}
+      className="group relative inline-flex items-center gap-2 overflow-hidden rounded-2xl px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(229,9,20,0.45)]"
+      style={{ background: RR.red } as any}
+    >
+      <span className="relative z-10 flex items-center gap-2">
+        <Zap className="size-4" /> Hot Now!
+      </span>
+      <span className="pointer-events-none absolute inset-0 -translate-x-full bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.28),transparent)] transition-transform duration-700 group-hover:translate-x-0" />
+    </motion.button>
+  );
+}
+
+/* -------------------------------- Featured --------------------------------- */
 function Featured() {
   const items = [
     { title: "Skyline Luxe Hotel", img: hotel1, rating: 4.9, price: 189, tag: "Top Pick" },
@@ -199,19 +297,12 @@ function Featured() {
             <h2 className="text-3xl font-bold">Featured Stays</h2>
             <p className="text-white/70">Cinematic tilt, parallax, and glow.</p>
           </div>
-          <Button variant="outline" className="rounded-2xl">
-            View all
-          </Button>
+          <Button variant="outline" className="rounded-2xl">View all</Button>
         </div>
+
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {items.map((it, i) => (
-            <motion.div
-              key={it.title}
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.06 }}
-            >
+            <TiltCard key={it.title}>
               <Card className="group overflow-hidden">
                 <div className="relative overflow-hidden">
                   <motion.img
@@ -227,10 +318,9 @@ function Featured() {
                     whileHover={{ opacity: 1 }}
                     className="absolute inset-0 bg-[radial-gradient(600px_200px_at_50%_120%,rgba(229,9,20,0.25),transparent)]"
                   />
-                  <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">
-                    {it.tag}
-                  </div>
+                  <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">{it.tag}</div>
                 </div>
+
                 <CardContent>
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -252,7 +342,7 @@ function Featured() {
                   </div>
                 </CardContent>
               </Card>
-            </motion.div>
+            </TiltCard>
           ))}
         </div>
       </div>
@@ -260,7 +350,7 @@ function Featured() {
   );
 }
 
-/* ---------- Events ---------- */
+/* --------------------------------- Events ---------------------------------- */
 function EventStrip() {
   const ev = [
     { title: "Arena Night: The Tour", sub: "Doha • Aug 28", img: arenaImg },
@@ -275,29 +365,29 @@ function EventStrip() {
           <p className="text-white/70">Curated events with motion-blur slides.</p>
         </div>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {ev.map((e, i) => (
-            <motion.a
-              key={e.title}
-              href="#"
-              className="group relative block overflow-hidden rounded-3xl border border-white/10 bg-white/5"
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.08 }}
-            >
-              <motion.img
-                src={e.img}
-                alt=""
-                className="h-60 w-full object-cover"
-                whileHover={{ scale: 1.1, filter: "blur(1px)" }}
-                transition={{ duration: 0.6 }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/0" />
-              <div className="absolute inset-x-4 bottom-4">
-                <div className="text-sm text-white/70">{e.sub}</div>
-                <div className="text-xl font-semibold">{e.title}</div>
-              </div>
-            </motion.a>
+          {ev.map((e) => (
+            <TiltCard key={e.title}>
+              <motion.a
+                href="#"
+                className="group relative block overflow-hidden rounded-3xl border border-white/10 bg-white/5"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+              >
+                <motion.img
+                  src={e.img}
+                  alt=""
+                  className="h-60 w-full object-cover"
+                  whileHover={{ scale: 1.1, filter: "blur(1px)" }}
+                  transition={{ duration: 0.6 }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/0" />
+                <div className="absolute inset-x-4 bottom-4">
+                  <div className="text-sm text-white/70">{e.sub}</div>
+                  <div className="text-xl font-semibold">{e.title}</div>
+                </div>
+              </motion.a>
+            </TiltCard>
           ))}
         </div>
       </div>
@@ -305,7 +395,7 @@ function EventStrip() {
   );
 }
 
-/* ---------- Page component ---------- */
+/* ------------------------------- PAGE -------------------------------------- */
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
 
@@ -322,7 +412,6 @@ export default function RedRouteLandingUltra() {
 
   return (
     <div className="min-h-screen w-full bg-black font-sans">
-      {/* Logout */}
       <button
         onClick={logout}
         className="fixed top-5 right-5 z-50 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 text-white hover:bg-white/20"

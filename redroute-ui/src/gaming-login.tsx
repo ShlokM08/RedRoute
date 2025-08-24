@@ -73,8 +73,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
           <span className="relative inline-block text-3xl font-bold mb-2 text-white">Red Route</span>
         </h2>
         <p className="text-white/80 flex flex-col items-center space-y-1">
-          <span className="relative inline-block"> Your next stay, event & experience — booked.</span>
-         
+          <span className="relative inline-block">Your next stay, event & experience — booked.</span>
         </p>
       </div>
 
@@ -97,9 +96,16 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
           <a href="#" className="text-sm text-white/80 hover:text-white">Forgot password?</a>
         </div>
 
+        {/* RED ROUTE brand red button */}
         <button
-          type="submit" disabled={isSubmitting}
-          className={`w-full py-3 rounded-lg ${isSuccess ? 'animate-success' : 'bg-purple-600 hover:bg-purple-700'} text-white font-medium transition-all shadow-lg shadow-purple-500/20`}
+          type="submit"
+          disabled={isSubmitting}
+          className="
+            w-full py-3 rounded-lg text-white font-medium transition-all
+            bg-[#E50914] hover:bg-[#c40b13] focus:outline-none focus:ring-2 focus:ring-[#E50914]/50
+            disabled:opacity-70 disabled:cursor-not-allowed
+            shadow-[0_10px_30px_rgba(229,9,20,0.35)]
+          "
         >
           {isSubmitting ? 'Logging in...' : 'Login'}
         </button>
@@ -108,9 +114,6 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
       <div className="mt-8">
         <div className="relative flex items-center justify-center">
           <div className="border-t border-white/10 absolute w-full"></div>
-     
-       
-        
         </div>
       </div>
 
