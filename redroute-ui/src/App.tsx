@@ -3,17 +3,18 @@ import SignIn from "./SignIn";
 import RedRouteLandingUltra from "./RedRouteLandingUltra";
 
 export default function App() {
-  const isAuthed = !!localStorage.getItem("rr_demo_user");
-
   return (
     <BrowserRouter>
       <Routes>
-        {/* Sign-in is the landing page */}
+        {/* Default / landing: Gaming Sign-In */}
+        <Route index element={<SignIn />} />
         <Route path="/" element={<SignIn />} />
-        {/* Main site after sign-in */}
+
+        {/* Main site after you navigate from Sign-In */}
         <Route path="/home" element={<RedRouteLandingUltra />} />
-        {/* Fallback: send unknown routes to the right place */}
-        <Route path="*" element={<Navigate to={isAuthed ? "/home" : "/"} replace />} />
+
+        {/* Anything else -> send to Sign-In */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
