@@ -228,7 +228,6 @@ function CalendarPopover() {
       setStart(d);
       setEnd(null);
     } else {
-      // pick an end
       setEnd(d);
     }
   };
@@ -239,6 +238,8 @@ function CalendarPopover() {
       : start
       ? `${fmtShort(start)} — …`
       : "Select dates";
+
+  const isEmpty = !start && !end;
 
   // Close on outside click
   useEffect(() => {
@@ -269,13 +270,18 @@ function CalendarPopover() {
 
   return (
     <div className="relative">
+      {/* Trigger styled like the other inputs */}
       <button
         ref={anchorRef}
         type="button"
         onClick={toggle}
-        className="h-10 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-left text-sm text-white/90 hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-red-600/60"
+        className={[
+          "h-10 w-full rounded-xl px-3 text-left text-sm",
+          "border border-white/15 bg-white/5",
+          "hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-red-600/60",
+        ].join(" ")}
       >
-        {label}
+        <span className={isEmpty ? "text-white/60" : "text-white/90"}>{label}</span>
       </button>
 
       <AnimatePresence>
@@ -308,9 +314,11 @@ function CalendarPopover() {
 
             <div className="px-3 py-2">
               {/* DOW header */}
-              <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-white/60 mb-1">
+              <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
                 {dow.map((d) => (
-                  <div key={d} className="py-1">{d}</div>
+                  <div key={d} className="py-1">
+                    {d}
+                  </div>
                 ))}
               </div>
 
@@ -341,7 +349,7 @@ function CalendarPopover() {
               </div>
 
               {/* Footer hint */}
-              <div className="mt-2 flex items-center justify-between text-[11px] text-white/60 px-1">
+              <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-white/60">
                 <span>Pick start, then end</span>
                 <button
                   className="underline hover:text-white"
@@ -360,6 +368,7 @@ function CalendarPopover() {
     </div>
   );
 }
+
 
 /* ----------------------------- HERO SECTION -------------------------------- */
 function Hero() {
@@ -428,15 +437,13 @@ function Hero() {
             <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
               {/* LEFT: headline + actions */}
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
-                <Kinetic text="RedRoute is the show." className="text-4xl md:text-6xl" />
+                <Kinetic text="Welcome to RedRoute" className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
-                  Hotels. Events. Experiences. A kinetic interface that moves like a trailer — every scroll feels like a scene cut.
+                  Hotels. Events. Experiences. Your gateway to the time of your life—anywhere, anytime!
                 </p>
                 <div className="flex flex-wrap items-center gap-2 md:gap-3">
                   <MagneticButton />
-                  <Button variant="outline" className="h-10 rounded-xl px-4 text-sm">
-                    <Play className="mr-2 size-4" /> Watch 30s Reel
-                  </Button>
+                  
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] md:text-sm text-white/75">
                   <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Trusted by 120k+</div>
@@ -741,32 +748,7 @@ function StickyJourney() {
     { title: "Book", body: "Lightning checkout with saved details and Apple/Google Pay." },
     { title: "Enjoy", body: "Live itinerary, updates, and loyalty perks unlock on arrival." },
   ];
-  return (
-    <section className="px-6 pb-24 text-white">
-      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 md:grid-cols-3">
-        <div className="md:col-span-1 md:sticky md:top-20">
-          <h2 className="text-3xl font-bold">How it works</h2>
-          <p className="text-white/70">A quick cut of the journey — framed like scenes.</p>
-        </div>
-        <div className="md:col-span-2 space-y-6">
-          {steps.map((s, i) => (
-            <motion.div
-              key={s.title}
-              initial={{ opacity: 0, y: 20, scale: 0.98 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, margin: "-10% 0px" }}
-              transition={{ delay: i * 0.05 }}
-              className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur"
-            >
-              <div className="text-sm text-white/70">Scene {i + 1}</div>
-              <div className="text-xl font-semibold">{s.title}</div>
-              <div className="mt-1 text-white/80">{s.body}</div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
+  
 }
 
 /* ------------------------------- PAGE -------------------------------------- */
