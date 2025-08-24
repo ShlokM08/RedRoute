@@ -186,7 +186,7 @@ const fmtShort = (d: Date) =>
 
 function CalendarPopover() {
   const [open, setOpen] = useState(false);
-  const anchorRef = useRef<HTMLButtonElement | null>(null);
+  const anchorRef = useRef<HTMLDivElement | null>(null); // wrapper as anchor
   const popRef = useRef<HTMLDivElement | null>(null);
 
   const now = new Date();
@@ -198,22 +198,13 @@ function CalendarPopover() {
 
   const cells = useMonthMatrix(viewY, viewM);
 
-  const toggle = () => setOpen((o) => !o);
-  const close = () => setOpen(false);
-
   const onPrev = () => {
     const m = viewM - 1;
-    if (m < 0) {
-      setViewM(11);
-      setViewY((y) => y - 1);
-    } else setViewM(m);
+    if (m < 0) { setViewM(11); setViewY((y) => y - 1); } else setViewM(m);
   };
   const onNext = () => {
     const m = viewM + 1;
-    if (m > 11) {
-      setViewM(0);
-      setViewY((y) => y + 1);
-    } else setViewM(m);
+    if (m > 11) { setViewM(0); setViewY((y) => y + 1); } else setViewM(m);
   };
 
   const onPick = (d: Date) => {
@@ -222,6 +213,8 @@ function CalendarPopover() {
       setEnd(null);
     } else {
       setEnd(d);
+      // auto-close when end selected (optional)
+      setTimeout(() => setOpen(false), 120);
     }
   };
 
@@ -230,29 +223,27 @@ function CalendarPopover() {
       ? `${fmtShort(start)} — ${fmtShort(end)}`
       : start
       ? `${fmtShort(start)} — …`
-      : "Select dates";
+      : "";
 
-  const isEmpty = !start && !end;
-
+  // Close on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (!open) return;
-      const target = e.target as Node;
+      const t = e.target as Node;
       if (
         popRef.current &&
-        !popRef.current.contains(target) &&
+        !popRef.current.contains(t) &&
         anchorRef.current &&
-        !anchorRef.current.contains(target)
+        !anchorRef.current.contains(t)
       ) {
-        close();
+        setOpen(false);
       }
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  //const dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
+  const dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const isSelected = useCallback(
     (d: Date) =>
       (start && isSameDate(d, start)) || (end && isSameDate(d, end)),
@@ -260,19 +251,18 @@ function CalendarPopover() {
   );
 
   return (
-    <div className="relative">
-      <button
-        ref={anchorRef}
-        type="button"
-        onClick={toggle}
-        className={[
-          "h-10 w-full rounded-xl px-3 text-left text-sm",
-          "border border-white/15 bg-white/5",
-          "hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-red-600/60",
-        ].join(" ")}
-      >
-        <span className={isEmpty ? "text-white/60" : "text-white/90"}>{label}</span>
-      </button>
+    <div ref={anchorRef} className="relative">
+      {/* Use the SAME Input component so styling is identical */}
+      <Input
+        readOnly
+        value={label}
+        placeholder="Select dates"
+        onClick={() => setOpen(true)}
+        onFocus={() => setOpen(true)}
+        className="h-10 text-sm cursor-pointer select-none"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+      />
 
       <AnimatePresence>
         {open && (
@@ -304,10 +294,8 @@ function CalendarPopover() {
 
             <div className="px-3 py-2">
               <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
-                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-                  <div key={d} className="py-1">
-                    {d}
-                  </div>
+                {dow.map((d) => (
+                  <div key={d} className="py-1">{d}</div>
                 ))}
               </div>
 
@@ -340,10 +328,7 @@ function CalendarPopover() {
                 <span>Pick start, then end</span>
                 <button
                   className="underline hover:text-white"
-                  onClick={() => {
-                    setStart(null);
-                    setEnd(null);
-                  }}
+                  onClick={() => { setStart(null); setEnd(null); }}
                 >
                   Clear
                 </button>
@@ -355,6 +340,7 @@ function CalendarPopover() {
     </div>
   );
 }
+
 function Testimonials() {
   const quotes = [
     {
