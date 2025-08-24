@@ -25,7 +25,7 @@ export default function SignIn() {
       </div>
 
       <footer className="absolute bottom-4 left-0 right-0 text-center text-white/60 text-sm z-20">
-        © 2025 by Shlok
+        © 2025 by RedRoute
       </footer>
     </div>
   );

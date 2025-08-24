@@ -355,6 +355,85 @@ function CalendarPopover() {
     </div>
   );
 }
+function Testimonials() {
+  const quotes = [
+    {
+      name: "Aman Mehra",
+      role: "Product Lead",
+      text:
+        "RedRoute feels like a movie trailer — fast, beautiful, and I’m checked out in seconds.",
+      initials: "AM",
+      rating: 5,
+    },
+    {
+      name: "Sara Khan",
+      role: "Event Planner",
+      text:
+        "Searching hotels + events in one flow is brilliant. The micro-interactions are 👌",
+      initials: "SK",
+      rating: 5,
+    },
+  ];
+
+  return (
+    <section className="px-6 pb-16 text-white">
+      <div className="mx-auto max-w-7xl">
+        <h2 className="mb-6 text-3xl font-bold">What people say</h2>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {quotes.map((q) => (
+            <div
+              key={q.name}
+              className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur"
+            >
+              <div className="flex items-start gap-4">
+                {/* Avatar (initials) */}
+                <div className="grid h-12 w-12 place-items-center rounded-full bg-white/15 text-sm font-semibold">
+                  {q.initials}
+                </div>
+                <div className="flex-1">
+                  {/* Stars */}
+                  <div className="mb-2 flex gap-1 text-white/90">
+                    {Array.from({ length: q.rating }).map((_, i) => (
+                      <Star key={i} className="h-4 w-4 fill-white/90" />
+                    ))}
+                  </div>
+                  <p className="text-white/85">{q.text}</p>
+                  <div className="mt-3 text-sm text-white/70">
+                    {q.name} • {q.role}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+function SiteFooter() {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="px-6 pb-16 pt-10 text-white">
+      <div className="mx-auto max-w-7xl rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+        <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+          <div>
+            <div className="text-2xl font-black">RedRoute</div>
+            <div className="text-white/70">Hotels • Events • Experiences</div>
+          </div>
+          <nav className="flex gap-6 text-sm text-white/80">
+            <a href="#" className="hover:text-white">About</a>
+            <a href="#" className="hover:text-white">Careers</a>
+            <a href="#" className="hover:text-white">Help</a>
+            <a href="#" className="hover:text-white">Privacy</a>
+          </nav>
+        </div>
+        <div className="mt-6 border-t border-white/10 pt-4 text-sm text-white/60">
+          © {year} RedRoute. All rights reserved.
+        </div>
+      </div>
+    </footer>
+  );
+}
 
 /* ----------------------------- HERO SECTION -------------------------------- */
 function Hero() {
@@ -504,7 +583,7 @@ function MagneticButton() {
       className="group relative inline-flex items-center gap-2 overflow-hidden rounded-2xl px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(229,9,20,0.45)]"
     >
       <span className="relative z-10 flex items-center gap-2">
-        <Zap className="size-4" /> Hot Now!
+        <Zap className="size-4" /> Book Now
       </span>
       <span className="pointer-events-none absolute inset-0 -translate-x-full bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.28),transparent)] transition-transform duration-700 group-hover:translate-x-0" />
     </motion.button>
@@ -751,6 +830,8 @@ export default function RedRouteLandingUltra() {
       <Featured />
       <KenBurnsShowcase />
       <EventStrip />
+      <Testimonials />     
+      <SiteFooter />   
 
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
