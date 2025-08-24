@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
-import { Eye, EyeOff, Mail, Lock, Chrome, Twitter, Gamepad2 } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock} from 'lucide-react';
 
 interface LoginFormProps {
   onSubmit: (email: string, password: string, remember: boolean) => void;
@@ -10,7 +10,6 @@ interface FormInputProps {
   icon: React.ReactNode; type: string; placeholder: string;
   value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; required?: boolean;
 }
-interface SocialButtonProps { icon: React.ReactNode; name: string; }
 interface ToggleSwitchProps { checked: boolean; onChange: () => void; id: string; }
 
 const FormInput: React.FC<FormInputProps> = ({ icon, type, placeholder, value, onChange, required }) => (
@@ -23,11 +22,7 @@ const FormInput: React.FC<FormInputProps> = ({ icon, type, placeholder, value, o
   </div>
 );
 
-const SocialButton: React.FC<SocialButtonProps> = ({ icon }) => (
-  <button className="flex items-center justify-center p-2 bg-white/5 border border-white/10 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors">
-    {icon}
-  </button>
-);
+
 
 const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, id }) => (
   <div className="relative inline-block w-10 h-5 cursor-pointer">
@@ -55,14 +50,14 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false); const [isSuccess, setIsSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setIsSubmitting(true);
-    await new Promise(r => setTimeout(r, 800)); setIsSuccess(true);
+    await new Promise(r => setTimeout(r, 800)); 
     await new Promise(r => setTimeout(r, 400));
     onSubmit(email, password, remember);
-    setIsSubmitting(false); setIsSuccess(false);
+    setIsSubmitting(false); 
   };
 
   return (

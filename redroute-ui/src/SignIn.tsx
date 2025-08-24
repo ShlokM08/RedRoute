@@ -1,18 +1,16 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import LoginPage from "./gaming-login"; // file lives in src/
+import LoginPage from "./gaming-login"; 
 
 export default function SignIn() {
   const navigate = useNavigate();
 
-  // If already "logged in", go straight to /home
   useEffect(() => {
     const saved = localStorage.getItem("rr_demo_user");
     if (saved) navigate("/home");
   }, [navigate]);
 
-  // Super simple login: accept any non-empty values
-  const handleLogin = (email: string, password: string, remember: boolean) => {
+  const handleLogin = (email: string, password: string) => {
     if (!email || !password) return;
     localStorage.setItem("rr_demo_user", email);
     navigate("/home");
@@ -20,7 +18,6 @@ export default function SignIn() {
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center px-4 py-12">
-      {/* Background video served from /public as /s.mp4 */}
       <LoginPage.VideoBackground videoUrl="/s.mp4" />
 
       <div className="relative z-20 w-full max-w-md">

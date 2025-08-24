@@ -28,14 +28,12 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-// --- LOCAL IMAGES (adjust extensions if yours differ) ---
 import hotel1 from "./assets/images/featured_hotel.avif";
 import loft1 from "./assets/images/featured_loft.avif";
 import theatreImg from "./assets/images/event_theatre.avif";
 import villa1 from "./assets/images/featured_villa.jpeg";
 import arenaImg from "./assets/images/event_arena.jpeg";
 import rooftopImg from "./assets/images/event_rooftop.jpeg";
-// --------------------------------------------------------
 
 const RR = { red: "#E50914" } as const;
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
@@ -141,25 +139,21 @@ type DayCell = { date: Date; currentMonth: boolean; isToday: boolean };
 
 function useMonthMatrix(year: number, month: number) {
   return useMemo(() => {
-    // First day of month
     const first = new Date(year, month, 1);
     const startWeekday = (first.getDay() + 6) % 7; // Mon=0
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const prevMonthDays = new Date(year, month, 0).getDate();
 
     const cells: DayCell[] = [];
-    // Leading cells from prev month
     for (let i = startWeekday - 1; i >= 0; i--) {
       const d = prevMonthDays - i;
       const date = new Date(year, month - 1, d);
       cells.push({ date, currentMonth: false, isToday: isSameDate(date, new Date()) });
     }
-    // Current month
     for (let d = 1; d <= daysInMonth; d++) {
       const date = new Date(year, month, d);
       cells.push({ date, currentMonth: true, isToday: isSameDate(date, new Date()) });
     }
-    // Trailing cells (fill to complete weeks)
     while (cells.length % 7 !== 0) {
       const last = cells[cells.length - 1]?.date ?? new Date(year, month, 1);
       const date = new Date(last);
@@ -240,7 +234,6 @@ function CalendarPopover() {
 
   const isEmpty = !start && !end;
 
-  // Close on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (!open) return;
@@ -258,7 +251,6 @@ function CalendarPopover() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // Weeks header Mon..Sun
   const dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   const isSelected = useCallback(
@@ -269,7 +261,6 @@ function CalendarPopover() {
 
   return (
     <div className="relative">
-      {/* Trigger styled like the other inputs */}
       <button
         ref={anchorRef}
         type="button"
@@ -312,16 +303,14 @@ function CalendarPopover() {
             </div>
 
             <div className="px-3 py-2">
-              {/* DOW header */}
               <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
-                {dow.map((d) => (
+                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
                   <div key={d} className="py-1">
                     {d}
                   </div>
                 ))}
               </div>
 
-              {/* Day cells */}
               <div className="grid grid-cols-7 gap-1">
                 {cells.map(({ date, currentMonth, isToday }, idx) => {
                   const selected = isSelected(date);
@@ -347,7 +336,6 @@ function CalendarPopover() {
                 })}
               </div>
 
-              {/* Footer hint */}
               <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-white/60">
                 <span>Pick start, then end</span>
                 <button
@@ -368,17 +356,14 @@ function CalendarPopover() {
   );
 }
 
-
 /* ----------------------------- HERO SECTION -------------------------------- */
 function Hero() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // cursor glow & parallax
   const mx = useMotionValue(0.5);
   const my = useMotionValue(0.5);
-  const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
-
-  const pPanel = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
+const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
+const pPanel = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
 
   const glowX = useTransform(mx, (v) => `${v * 100}%`);
   const glowY = useTransform(my, (v) => `${v * 100}%`);
@@ -401,7 +386,6 @@ function Hero() {
 
   return (
     <section className="relative text-white">
-      {/* OUTER BANNER (video) */}
       <div className="relative h-[55vh] md:h-[48vh] w-full overflow-hidden">
         <video
           ref={videoRef}
@@ -417,7 +401,6 @@ function Hero() {
         <div className="absolute inset-0 -z-10 bg-black/28" />
         <div className="absolute inset-0 -z-10 [background:radial-gradient(900px_circle_at_20%_10%,rgba(229,9,20,0.20),transparent_60%),radial-gradient(900px_circle_at_85%_15%,rgba(255,107,107,0.16),transparent_65%)]" />
 
-        {/* rotating beams */}
         <div className="pointer-events-none absolute -left-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-25 mix-blend-screen">
           <div className="h-full w-full animate-[spin_36s_linear_infinite] [background:conic-gradient(from_0deg_at_50%_50%,rgba(229,9,20,0.28),transparent_30%,rgba(255,255,255,0.14),transparent_60%,rgba(229,9,20,0.22),transparent_90%)]" />
         </div>
@@ -425,18 +408,14 @@ function Hero() {
           <div className="h-full w-full animate-[spin_48s_linear_infinite_reverse] [background:conic-gradient(from_140deg_at_50%_50%,rgba(255,255,255,0.12),transparent_25%,rgba(229,9,20,0.22),transparent_65%,rgba(255,255,255,0.12),transparent_95%)]" />
         </div>
 
-        {/* INNER BANNER (glass) */}
         <div className="absolute inset-0 grid place-items-center px-4" onMouseMove={onMove}>
           <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-hidden">
-            {/* cursor glow (smaller + softer) */}
             <motion.div
-              className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full
-                         bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
+              className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
               style={{ left: glowX, top: glowY, translateX: "-50%", translateY: "-50%" }}
             />
 
             <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
-              {/* LEFT: headline + actions */}
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
                 <Kinetic text="Welcome to RedRoute" className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
@@ -444,7 +423,6 @@ function Hero() {
                 </p>
                 <div className="flex flex-wrap items-center gap-2 md:gap-3">
                   <MagneticButton />
-                  
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] md:text-sm text-white/75">
                   <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Trusted by 120k+</div>
@@ -453,14 +431,12 @@ function Hero() {
                 </div>
               </motion.div>
 
-              {/* RIGHT: compact search */}
               <motion.div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur" style={{ transform: pPanel }}>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
                   <Field icon={<MapPin className="size-4" />} label="Destination">
                     <Input className="h-10 text-sm focus:ring-2 focus:ring-red-600/60 focus:outline-none" placeholder="Where to?" />
                   </Field>
                   <Field icon={<Calendar className="size-4" />} label="Dates">
-                    {/* Themed calendar popover */}
                     <CalendarPopover />
                   </Field>
                   <Field icon={<User className="size-4" />} label="Guests">
@@ -488,7 +464,6 @@ function Hero() {
           </div>
         </div>
 
-        {/* keyframes */}
         <style>{`
           @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
           @keyframes spin { to { transform: rotate(360deg); } }
@@ -515,7 +490,10 @@ function MagneticButton() {
     x.set(clamp(dx * 0.2, -12, 12));
     y.set(clamp(dy * 0.2, -10, 10));
   }
-  function onLeave() { x.set(0); y.set(0); }
+  function onLeave() {
+    x.set(0);
+    y.set(0);
+  }
 
   return (
     <motion.button
@@ -741,22 +719,10 @@ function EventStrip() {
   );
 }
 
-/* ---------------------------- Sticky Journey ------------------------------- */
-function StickyJourney() {
-  const steps = [
-    { title: "Search", body: "Pick a city, dates, and vibe. Our feed cuts like a trailer." },
-    { title: "Choose", body: "Hotels and events curated in real-time — with motion previews." },
-    { title: "Book", body: "Lightning checkout with saved details and Apple/Google Pay." },
-    { title: "Enjoy", body: "Live itinerary, updates, and loyalty perks unlock on arrival." },
-  ];
-  
-}
-
 /* ------------------------------- PAGE -------------------------------------- */
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
 
-  // Guard: if not logged in, bounce to sign-in
   useEffect(() => {
     if (!localStorage.getItem("rr_demo_user")) {
       navigate("/");
@@ -785,9 +751,7 @@ export default function RedRouteLandingUltra() {
       <Featured />
       <KenBurnsShowcase />
       <EventStrip />
-      
 
-      {/* Up arrow: back to top */}
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
         className="fixed bottom-6 right-6 grid h-12 w-12 place-items-center rounded-full shadow-2xl"
