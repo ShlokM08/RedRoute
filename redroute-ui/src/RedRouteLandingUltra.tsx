@@ -206,9 +206,7 @@ function Hero() {
                 </p>
                 <div className="flex flex-wrap items-center gap-2 md:gap-3">
                   <MagneticButton />
-                  <Button variant="outline" className="h-10 rounded-xl px-4 text-sm">
-                    <Play className="mr-2 size-4" /> Watch 30s Reel
-                  </Button>
+                 
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] md:text-sm text-white/75">
                   <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Trusted by 120k+</div>
@@ -512,32 +510,7 @@ function StickyJourney() {
     { title: "Book", body: "Lightning checkout with saved details and Apple/Google Pay." },
     { title: "Enjoy", body: "Live itinerary, updates, and loyalty perks unlock on arrival." },
   ];
-  return (
-    <section className="px-6 pb-24 text-white">
-      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 md:grid-cols-3">
-        <div className="md:col-span-1 md:sticky md:top-20">
-          <h2 className="text-3xl font-bold">How it works</h2>
-          <p className="text-white/70">A quick cut of the journey — framed like scenes.</p>
-        </div>
-        <div className="md:col-span-2 space-y-6">
-          {steps.map((s, i) => (
-            <motion.div
-              key={s.title}
-              initial={{ opacity: 0, y: 20, scale: 0.98 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, margin: "-10% 0px" }}
-              transition={{ delay: i * 0.05 }}
-              className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur"
-            >
-              <div className="text-sm text-white/70">Scene {i + 1}</div>
-              <div className="text-xl font-semibold">{s.title}</div>
-              <div className="mt-1 text-white/80">{s.body}</div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
+ 
 }
 
 /* ------------------------------- PAGE -------------------------------------- */
