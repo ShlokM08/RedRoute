@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   motion,
@@ -200,9 +200,9 @@ function Hero() {
             <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
               {/* LEFT: headline + actions */}
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
-                <Kinetic text="RedRoute is the show." className="text-4xl md:text-6xl" />
+                <Kinetic text="Welcome to RedRoute" className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
-                  Hotels. Events. Experiences. A kinetic interface that moves like a trailer — every scroll feels like a scene cut.
+                  Hotels, Events, Experiences.Your gateway to the time of your life anywhere, anytime.
                 </p>
                 <div className="flex flex-wrap items-center gap-2 md:gap-3">
                   <MagneticButton />
@@ -344,6 +344,51 @@ function StatsStrip() {
         ))}
       </div>
     </section>
+  );
+}
+function DateRangeFields() {
+  const fmt = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  const addDays = (d: Date, n: number) => {
+    const t = new Date(d);
+    t.setDate(t.getDate() + n);
+    return t;
+  };
+
+  const today = new Date();
+  const [checkIn, setCheckIn] = useState<string>(fmt(today));
+  const [checkOut, setCheckOut] = useState<string>(fmt(addDays(today, 3)));
+
+  const onCheckIn = (v: string) => {
+    setCheckIn(v);
+    // keep checkout at least +1 day
+    const inD = new Date(v);
+    const outD = new Date(checkOut);
+    if (outD <= inD) setCheckOut(fmt(addDays(inD, 1)));
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="date"
+        value={checkIn}
+        min={fmt(today)}
+        onChange={(e) => onCheckIn(e.target.value)}
+        className="w-full h-10 rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-red-600/60"
+      />
+      <span className="text-white/50">→</span>
+      <input
+        type="date"
+        value={checkOut}
+        min={fmt(addDays(new Date(checkIn), 1))}
+        onChange={(e) => setCheckOut(e.target.value)}
+        className="w-full h-10 rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-red-600/60"
+      />
+    </div>
   );
 }
 
