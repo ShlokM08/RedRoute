@@ -670,13 +670,14 @@ function StatsStrip() {
 }
 
 /* -------------------------------- Featured --------------------------------- */
+/** Match what the API returns */
 type HotelImage = { id: string; url: string; alt?: string | null };
 type Hotel = {
   id: string;
   name: string;
   city: string;
   price: number;
-  rating: number;
+  rating: number | null;
   images: HotelImage[];
 };
 
@@ -685,133 +686,129 @@ function Featured() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-React.useEffect(() => {
-  (async () => {
-    setLoading(true);
-    try {
-      const url = `${API_BASE}/api/hotels`;
-      const r = await fetch(url, {
-        headers: { Accept: "application/json" },
-      });
+  React.useEffect(() => {
+    let cancelled = false;
 
-      if (!r.ok) {
-        throw new Error(`HTTP ${r.status}`);
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const r = await fetch("/api/hotels", {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          cache: "no-store", // avoid stale cache
+        });
+
+        const ct = r.headers.get("content-type") || "";
+
+        if (!r.ok) {
+          // Try to read JSON error
+          let message = `HTTP ${r.status}`;
+          try {
+            const j = await r.json();
+            if (j?.error) message += ` – ${j.error}${j.code ? ` (${j.code})` : ""}`;
+          } catch {
+            // ignore
+          }
+          throw new Error(message);
+        }
+
+        if (!ct.includes("application/json")) {
+          // If a dev server or HTML leak hits this route, you’ll see it
+          throw new Error(`Got non-JSON (${ct || "no content-type"})`);
+        }
+
+        const data: Hotel[] = await r.json();
+        if (!cancelled) setItems(data);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || "Failed to load hotels");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
+    })();
 
-      // Be defensive in case an HTML page is returned
-      const raw = await r.text();
-      if (raw.trim().startsWith("<")) {
-        throw new Error("Got HTML instead of JSON (did you hit a dev server?)");
-      }
-
-      const data: Hotel[] = JSON.parse(raw);
-      setItems(data);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load hotels");
-    } finally {
-      setLoading(false);
-    }
-  })();
-}, []);
-
-
-  // simple skeletons while loading
-  if (loading) {
-    return (
-      <section id="gallery" className="px-6 py-16 text-white">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-6 flex items-end justify-between">
-            <div>
-              <h2 className="text-3xl font-bold">Featured Stays</h2>
-              <p className="text-white/70">Cinematic tilt, parallax, and glow.</p>
-            </div>
-            <Button variant="outline" className="rounded-2xl">View all</Button>
-          </div>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            {[0,1,2].map(i => (
-              <div key={i} className="h-80 w-full animate-pulse rounded-2xl bg-white/10" />
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <section id="gallery" className="px-6 py-16 text-white">
-        <div className="mx-auto max-w-7xl">
-          <h2 className="text-3xl font-bold mb-2">Featured Stays</h2>
-          <p className="text-red-400">Couldn’t load hotels: {error}</p>
-        </div>
-      </section>
-    );
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
-    <section id="gallery" className="px-6 py-16 text-white">
+    <section id="featured" className="px-6 py-16 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-6 flex items-end justify-between">
-          <div>
-            <h2 className="text-3xl font-bold">Featured Stays</h2>
-            <p className="text-white/70">Cinematic tilt, parallax, and glow.</p>
-          </div>
-          <Button variant="outline" className="rounded-2xl">View all</Button>
-        </div>
+        <h2 className="text-3xl font-bold">Featured Stays</h2>
+        <p className="text-white/70 mb-6">Cinematic tilt, parallax, and glow.</p>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {items.map((it) => {
-            const cover = it.images?.[0]?.url ?? "/images/fallback.jpg";
-            return (
-              <TiltCard key={it.id}>
-                <Card className="group overflow-hidden">
-                  <div className="relative overflow-hidden">
-                    <motion.img
-                      src={cover}
-                      alt={it.images?.[0]?.alt ?? it.name}
-                      className="h-60 w-full object-cover"
-                      initial={{ scale: 1.05 }}
-                      whileInView={{ scale: 1.12 }}
-                      transition={{ duration: 6, ease: "linear" }}
-                      whileHover={{ scale: 1.2 }}
+        {loading && (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-60 rounded-2xl bg-white/5 animate-pulse border border-white/10"
+              />
+            ))}
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="mt-2 text-red-400 text-base">
+            Couldn’t load hotels: {error}
+          </div>
+        )}
+
+        {!loading && !error && (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {items.map((h) => {
+              // pick first image or fallback
+              const img = h.images?.[0]?.url || "/images/featured_hotel.avif";
+              const src = img.startsWith("http") ? img : img;
+
+              return (
+                <article
+                  key={h.id}
+                  className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm"
+                >
+                  <div className="relative h-60 w-full overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={src}
+                      alt={h.images?.[0]?.alt ?? h.name}
+                      className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+                      loading="lazy"
                     />
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      whileHover={{ opacity: 1 }}
-                      className="absolute inset-0 bg-[radial-gradient(600px_200px_at_50%_120%,rgba(229,9,20,0.25),transparent)]"
-                    />
                     <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">
-                      {it.city}
+                      {h.city}
                     </div>
                   </div>
 
-                  <CardContent>
+                  <div className="p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-lg font-semibold">{it.name}</h3>
+                        <h3 className="text-lg font-semibold">{h.name}</h3>
                         <div className="mt-1 flex items-center gap-1 text-sm text-white/80">
-                          <Star className="size-4" /> {it.rating.toFixed(1)} • Free cancellation
+                          <Star className="h-4 w-4" />
+                          {h.rating ?? "—"} • Free cancellation
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-xl font-bold">${it.price}</div>
+                        <div className="text-xl font-bold">${h.price}</div>
                         <div className="text-xs text-white/60">per night</div>
                       </div>
                     </div>
 
                     <div className="mt-4 flex items-center justify-between">
-                      <Button className="rounded-xl">Reserve</Button>
-                      <motion.span whileHover={{ x: 4 }} className="text-sm text-white/70">
-                        Details →
-                      </motion.span>
+                      <button className="rounded-xl bg-[#E50914] px-4 py-2 text-sm font-semibold shadow-[0_10px_30px_rgba(229,9,20,0.45)] hover:brightness-110">
+                        Reserve
+                      </button>
+                      <span className="text-sm text-white/70">Details →</span>
                     </div>
-                  </CardContent>
-                </Card>
-              </TiltCard>
-            );
-          })}
-        </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </div>
     </section>
   );
