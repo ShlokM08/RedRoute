@@ -29,7 +29,6 @@ import {
 
 /* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
 function KenBurnsShowcase() {
-  // Put these files in /public/images/ with these names or change paths to match your files.
   const slides = [
     { img: "/images/event_arena.jpeg",   title: "Arena Night",      sub: "Citywide tour" },
     { img: "/images/event_rooftop.jpeg", title: "Rooftop Cinema",   sub: "Fridays 8pm" },
@@ -68,7 +67,6 @@ function KenBurnsShowcase() {
     </section>
   );
 }
-
 
 const RR = { red: "#E50914" } as const;
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
@@ -219,9 +217,23 @@ const isWithin = (d: Date, a: Date | null, b: Date | null) => {
 const fmtShort = (d: Date) =>
   d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
+/* Match Dates input look for plain inputs */
+function PillInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={[
+        "h-10 w-full rounded-xl px-3 text-left text-sm",
+        "border border-white/15 bg-white/5 text-white/90 placeholder-white/60",
+        "hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-red-600/60",
+      ].join(" ")}
+    />
+  );
+}
+
 function CalendarPopover() {
   const [open, setOpen] = useState(false);
-  const anchorRef = useRef<HTMLDivElement | null>(null); // wrapper as anchor
+  const anchorRef = useRef<HTMLDivElement | null>(null);
   const popRef = useRef<HTMLDivElement | null>(null);
 
   const now = new Date();
@@ -248,7 +260,6 @@ function CalendarPopover() {
       setEnd(null);
     } else {
       setEnd(d);
-      // auto-close when end selected (optional)
       setTimeout(() => setOpen(false), 120);
     }
   };
@@ -260,7 +271,6 @@ function CalendarPopover() {
       ? `${fmtShort(start)} — …`
       : "";
 
-  // Close on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (!open) return;
@@ -287,7 +297,6 @@ function CalendarPopover() {
 
   return (
     <div ref={anchorRef} className="relative">
-      {/* Use the SAME Input component so styling is identical */}
       <Input
         readOnly
         value={label}
@@ -407,12 +416,10 @@ function Testimonials() {
               className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur"
             >
               <div className="flex items-start gap-4">
-                {/* Avatar (initials) */}
                 <div className="grid h-12 w-12 place-items-center rounded-full bg-white/15 text-sm font-semibold">
                   {q.initials}
                 </div>
                 <div className="flex-1">
-                  {/* Stars */}
                   <div className="mb-2 flex gap-1 text-white/90">
                     {Array.from({ length: q.rating }).map((_, i) => (
                       <Star key={i} className="h-4 w-4 fill-white/90" />
@@ -431,6 +438,7 @@ function Testimonials() {
     </section>
   );
 }
+
 function SiteFooter() {
   const year = new Date().getFullYear();
   return (
@@ -462,8 +470,8 @@ function Hero() {
 
   const mx = useMotionValue(0.5);
   const my = useMotionValue(0.5);
-const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
-const pPanel = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
+  const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
+  const pPanel = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
 
   const glowX = useTransform(mx, (v) => `${v * 100}%`);
   const glowY = useTransform(my, (v) => `${v * 100}%`);
@@ -531,18 +539,24 @@ const pPanel = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 
                 </div>
               </motion.div>
 
+              {/* Search panel */}
               <motion.div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur" style={{ transform: pPanel }}>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
                   <Field icon={<MapPin className="size-4" />} label="Destination">
-                    <Input className="h-10 text-sm focus:ring-2 focus:ring-red-600/60 focus:outline-none" placeholder="Where to?" />
+                    <PillInput placeholder="Where to?" />
                   </Field>
+
                   <Field icon={<Calendar className="size-4" />} label="Dates">
                     <CalendarPopover />
                   </Field>
+
                   <Field icon={<User className="size-4" />} label="Guests">
-                    <Input className="h-10 text-sm focus:ring-2 focus:ring-red-600/60 focus:outline-none" placeholder="2 Adults" />
+                    <PillInput placeholder="2 Adults" />
                   </Field>
-                  <div className="flex items-end">
+
+                  {/* Align search with inputs using spacer label */}
+                  <div className="flex flex-col">
+                    <span className="h-5 text-sm opacity-0 select-none">Search</span>
                     <Button className="h-10 w-full text-sm rounded-xl relative overflow-hidden">
                       <span className="relative z-10">Search</span>
                       <span className="pointer-events-none absolute inset-0 translate-x-[-120%] bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] animate-[sheen_1.8s_linear_infinite]" />
@@ -590,10 +604,7 @@ function MagneticButton() {
     x.set(clamp(dx * 0.2, -12, 12));
     y.set(clamp(dy * 0.2, -10, 10));
   }
-  function onLeave() {
-    x.set(0);
-    y.set(0);
-  }
+  function onLeave() { x.set(0); y.set(0); }
 
   return (
     <motion.button
@@ -665,7 +676,6 @@ function StatsStrip() {
 }
 
 /* -------------------------------- Featured --------------------------------- */
-/** Match what the API returns */
 type HotelImage = { id: string; url: string; alt?: string | null };
 type Hotel = {
   id: string;
@@ -682,27 +692,24 @@ function Featured() {
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-  (async () => {
-    setLoading(true);
-    try {
-      const r = await fetch("/api/hotels", { credentials: "include" });
-      if (!r.ok) {
-        const maybeJson = await r.json().catch(() => null);
-        const msg =
-          maybeJson?.error ??
-          `HTTP ${r.status}`; // falls back to plain code if no JSON
-        throw new Error(msg);
+    (async () => {
+      setLoading(true);
+      try {
+        const r = await fetch("/api/hotels", { credentials: "include" });
+        if (!r.ok) {
+          const maybeJson = await r.json().catch(() => null);
+          const msg = maybeJson?.error ?? `HTTP ${r.status}`;
+          throw new Error(msg);
+        }
+        const data: Hotel[] = await r.json();
+        setItems(data);
+      } catch (e: any) {
+        setError(e?.message || "Failed to load hotels");
+      } finally {
+        setLoading(false);
       }
-      const data = await r.json();
-      setItems(data);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load hotels");
-    } finally {
-      setLoading(false);
-    }
-  })();
-}, []);
-
+    })();
+  }, []);
 
   return (
     <section id="featured" className="px-6 py-16 text-white">
@@ -713,10 +720,7 @@ function Featured() {
         {loading && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-60 rounded-2xl bg-white/5 animate-pulse border border-white/10"
-              />
+              <div key={i} className="h-60 rounded-2xl bg-white/5 animate-pulse border border-white/10" />
             ))}
           </div>
         )}
@@ -730,17 +734,12 @@ function Featured() {
         {!loading && !error && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {items.map((h) => {
-              // pick first image or fallback
               const img = h.images?.[0]?.url || "/images/featured_hotel.avif";
               const src = img.startsWith("http") ? img : img;
 
               return (
-                <article
-                  key={h.id}
-                  className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm"
-                >
+                <article key={h.id} className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
                   <div className="relative h-60 w-full overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={src}
                       alt={h.images?.[0]?.alt ?? h.name}
@@ -784,9 +783,6 @@ function Featured() {
     </section>
   );
 }
-
-
-
 
 /* --------------------------------- Events ---------------------------------- */
 function EventStrip() {
@@ -835,7 +831,6 @@ function EventStrip() {
   );
 }
 
-
 /* ------------------------------- PAGE -------------------------------------- */
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
@@ -868,8 +863,8 @@ export default function RedRouteLandingUltra() {
       <Featured />
       <KenBurnsShowcase />
       <EventStrip />
-      <Testimonials />     
-      <SiteFooter />   
+      <Testimonials />
+      <SiteFooter />
 
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
