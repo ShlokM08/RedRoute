@@ -11,7 +11,6 @@ import {
   AnimatePresence,
 } from "framer-motion";
 import { Button } from "./components/ui/button";
-import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import {
   Calendar,
@@ -27,11 +26,7 @@ import {
   TimerReset,
   ShieldCheck,
 } from "lucide-react";
-const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE?.replace(/\/$/, "") ||
-  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-    ? "https://red-route-voau.vercel.app"
-    : "");
+
 /* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
 function KenBurnsShowcase() {
   // Put these files in /public/images/ with these names or change paths to match your files.
