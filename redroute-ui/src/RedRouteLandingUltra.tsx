@@ -27,6 +27,11 @@ import {
   TimerReset,
   ShieldCheck,
 } from "lucide-react";
+const API_BASE =
+  (import.meta as any).env?.VITE_API_BASE?.replace(/\/$/, "") ||
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "https://red-route-voau.vercel.app"
+    : "");
 /* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
 function KenBurnsShowcase() {
   // Put these files in /public/images/ with these names or change paths to match your files.
@@ -680,20 +685,35 @@ function Featured() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch("/api/hotels", { credentials: "include" });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data: Hotel[] = await r.json();
-        setItems(data);
-      } catch (e: any) {
-        setError(e?.message ?? "Failed to load hotels");
-      } finally {
-        setLoading(false);
+React.useEffect(() => {
+  (async () => {
+    setLoading(true);
+    try {
+      const url = `${API_BASE}/api/hotels`;
+      const r = await fetch(url, {
+        headers: { Accept: "application/json" },
+      });
+
+      if (!r.ok) {
+        throw new Error(`HTTP ${r.status}`);
       }
-    })();
-  }, []);
+
+      // Be defensive in case an HTML page is returned
+      const raw = await r.text();
+      if (raw.trim().startsWith("<")) {
+        throw new Error("Got HTML instead of JSON (did you hit a dev server?)");
+      }
+
+      const data: Hotel[] = JSON.parse(raw);
+      setItems(data);
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to load hotels");
+    } finally {
+      setLoading(false);
+    }
+  })();
+}, []);
+
 
   // simple skeletons while loading
   if (loading) {

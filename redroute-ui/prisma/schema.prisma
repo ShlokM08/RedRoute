@@ -8,36 +8,39 @@ datasource db {
 }
 
 model Hotel {
-  id          Int           @id @default(autoincrement())
+  id          Int          @id @default(autoincrement())
   name        String
   city        String
   price       Int
   rating      Float
   description String?
-  images      HotelImage[]  // <- relation used by your seed
+  images      HotelImage[] // <- relation used by your seed
   bookings    Booking[]
   favorites   Favorite[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }
 
 model HotelImage {
-  id      Int    @id @default(autoincrement())
+  id      Int     @id @default(autoincrement())
   url     String
   alt     String?
   hotelId Int
-  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotel   Hotel   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 }
 
 model Booking {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   hotelId   Int
-  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  userId    String
-  start     DateTime
-  end       DateTime
-  guests    Int      @default(1)
-  createdAt DateTime @default(now())
+  userId    String? // nullable is fine if you want anonymous bookings
+  startDate DateTime? // optional
+  endDate   DateTime? // optional
+  guests    Int       @default(2)
+  status    String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
 }
 
 model Favorite {
