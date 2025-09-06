@@ -14,7 +14,7 @@ function Skyscraper({ x, z, h }: { x: number; z: number; h: number }) {
     </mesh>
   );
 }
-
+//redploy
 function Buildings() {
   const blocks = useMemo(() => {
     const arr: { x: number; z: number; h: number }[] = [];
