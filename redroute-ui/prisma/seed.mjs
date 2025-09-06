@@ -21,7 +21,7 @@ async function main() {
           { url: "/images/featured_hotel.avif", alt: "Skyline Luxe" }
         ]
       }
-    }
+    }//change
   });
 
   await prisma.hotel.create({
