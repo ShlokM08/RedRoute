@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Hotel {
+  id          Int           @id @default(autoincrement())
+  name        String
+  city        String
+  price       Int
+  rating      Float
+  description String?
+  images      HotelImage[]  // <- relation used by your seed
+  bookings    Booking[]
+  favorites   Favorite[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model HotelImage {
+  id      Int    @id @default(autoincrement())
+  url     String
+  alt     String?
+  hotelId Int
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+}
+
+model Booking {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  userId    String
+  start     DateTime
+  end       DateTime
+  guests    Int      @default(1)
+  createdAt DateTime @default(now())
+}
+
+model Favorite {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([hotelId, userId])
+}

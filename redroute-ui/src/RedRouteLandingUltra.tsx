@@ -27,13 +27,48 @@ import {
   TimerReset,
   ShieldCheck,
 } from "lucide-react";
+/* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
+function KenBurnsShowcase() {
+  // Put these files in /public/images/ with these names or change paths to match your files.
+  const slides = [
+    { img: "/images/event_arena.jpeg",   title: "Arena Night",      sub: "Citywide tour" },
+    { img: "/images/event_rooftop.jpeg", title: "Rooftop Cinema",   sub: "Fridays 8pm" },
+    { img: "/images/event_theatre.avif", title: "Old Town Theatre", sub: "Matinee daily" },
+  ];
+  const seq = [...slides, ...slides];
 
-import hotel1 from "./assets/images/featured_hotel.avif";
-import loft1 from "./assets/images/featured_loft.avif";
-import theatreImg from "./assets/images/event_theatre.avif";
-import villa1 from "./assets/images/featured_villa.jpeg";
-import arenaImg from "./assets/images/event_arena.jpeg";
-import rooftopImg from "./assets/images/event_rooftop.jpeg";
+  return (
+    <section className="px-6 pb-16 text-white">
+      <div className="mx-auto max-w-7xl overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+        <div className="relative flex animate-[kbmarquee_30s_linear_infinite]">
+          {seq.map((s, i) => (
+            <div key={i} className="relative h-56 min-w-[70%] md:h-72 md:min-w-[40%] overflow-hidden">
+              <motion.img
+                src={s.img}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg"; }}
+                alt={s.title}
+                className="absolute inset-0 h-full w-full object-cover"
+                initial={{ scale: 1.05, x: 0 }}
+                whileInView={{ scale: 1.18, x: 15 }}
+                transition={{ duration: 10, ease: "linear" }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/0" />
+              <div className="absolute bottom-3 left-4">
+                <div className="text-sm text-white/80">{s.sub}</div>
+                <div className="text-xl font-semibold">{s.title}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <style>{`
+        @keyframes kbmarquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+        @media (prefers-reduced-motion: reduce) { .animate-[kbmarquee_30s_linear_infinite]{animation:none} }
+      `}</style>
+    </section>
+  );
+}
+
 
 const RR = { red: "#E50914" } as const;
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
@@ -630,12 +665,69 @@ function StatsStrip() {
 }
 
 /* -------------------------------- Featured --------------------------------- */
+type HotelImage = { id: string; url: string; alt?: string | null };
+type Hotel = {
+  id: string;
+  name: string;
+  city: string;
+  price: number;
+  rating: number;
+  images: HotelImage[];
+};
+
 function Featured() {
-  const items = [
-    { title: "Skyline Luxe Hotel", img: hotel1, rating: 4.9, price: 189, tag: "Top Pick" },
-    { title: "Coastal Escape Villa", img: villa1, rating: 4.8, price: 259, tag: "New" },
-    { title: "Downtown Creative Loft", img: loft1, rating: 4.7, price: 139, tag: "Value" },
-  ];
+  const [items, setItems] = React.useState<Hotel[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/hotels", { credentials: "include" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data: Hotel[] = await r.json();
+        setItems(data);
+      } catch (e: any) {
+        setError(e?.message ?? "Failed to load hotels");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // simple skeletons while loading
+  if (loading) {
+    return (
+      <section id="gallery" className="px-6 py-16 text-white">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-6 flex items-end justify-between">
+            <div>
+              <h2 className="text-3xl font-bold">Featured Stays</h2>
+              <p className="text-white/70">Cinematic tilt, parallax, and glow.</p>
+            </div>
+            <Button variant="outline" className="rounded-2xl">View all</Button>
+          </div>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {[0,1,2].map(i => (
+              <div key={i} className="h-80 w-full animate-pulse rounded-2xl bg-white/10" />
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section id="gallery" className="px-6 py-16 text-white">
+        <div className="mx-auto max-w-7xl">
+          <h2 className="text-3xl font-bold mb-2">Featured Stays</h2>
+          <p className="text-red-400">Couldn’t load hotels: {error}</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id="gallery" className="px-6 py-16 text-white">
       <div className="mx-auto max-w-7xl">
@@ -648,104 +740,74 @@ function Featured() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {items.map((it) => (
-            <TiltCard key={it.title}>
-              <Card className="group overflow-hidden">
-                <div className="relative overflow-hidden">
-                  <motion.img
-                    src={it.img}
-                    alt=""
-                    className="h-60 w-full object-cover"
-                    initial={{ scale: 1.05 }}
-                    whileInView={{ scale: 1.12 }}
-                    transition={{ duration: 6, ease: "linear" }}
-                    whileHover={{ scale: 1.2 }}
-                  />
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    whileHover={{ opacity: 1 }}
-                    className="absolute inset-0 bg-[radial-gradient(600px_200px_at_50%_120%,rgba(229,9,20,0.25),transparent)]"
-                  />
-                  <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">{it.tag}</div>
-                </div>
+          {items.map((it) => {
+            const cover = it.images?.[0]?.url ?? "/images/fallback.jpg";
+            return (
+              <TiltCard key={it.id}>
+                <Card className="group overflow-hidden">
+                  <div className="relative overflow-hidden">
+                    <motion.img
+                      src={cover}
+                      alt={it.images?.[0]?.alt ?? it.name}
+                      className="h-60 w-full object-cover"
+                      initial={{ scale: 1.05 }}
+                      whileInView={{ scale: 1.12 }}
+                      transition={{ duration: 6, ease: "linear" }}
+                      whileHover={{ scale: 1.2 }}
+                    />
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      whileHover={{ opacity: 1 }}
+                      className="absolute inset-0 bg-[radial-gradient(600px_200px_at_50%_120%,rgba(229,9,20,0.25),transparent)]"
+                    />
+                    <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">
+                      {it.city}
+                    </div>
+                  </div>
 
-                <CardContent>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-semibold">{it.title}</h3>
-                      <div className="mt-1 flex items-center gap-1 text-sm text-white/80">
-                        <Star className="size-4" /> {it.rating} • Free cancellation
+                  <CardContent>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-semibold">{it.name}</h3>
+                        <div className="mt-1 flex items-center gap-1 text-sm text-white/80">
+                          <Star className="size-4" /> {it.rating.toFixed(1)} • Free cancellation
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xl font-bold">${it.price}</div>
+                        <div className="text-xs text-white/60">per night</div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-xl font-bold">${it.price}</div>
-                      <div className="text-xs text-white/60">per night</div>
+
+                    <div className="mt-4 flex items-center justify-between">
+                      <Button className="rounded-xl">Reserve</Button>
+                      <motion.span whileHover={{ x: 4 }} className="text-sm text-white/70">
+                        Details →
+                      </motion.span>
                     </div>
-                  </div>
-                  <div className="mt-4 flex items-center justify-between">
-                    <Button className="rounded-xl">Reserve</Button>
-                    <motion.span whileHover={{ x: 4 }} className="text-sm text-white/70">
-                      Details →
-                    </motion.span>
-                  </div>
-                </CardContent>
-              </Card>
-            </TiltCard>
-          ))}
+                  </CardContent>
+                </Card>
+              </TiltCard>
+            );
+          })}
         </div>
       </div>
     </section>
   );
 }
 
-/* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
-function KenBurnsShowcase() {
-  const slides = [
-    { img: arenaImg, title: "Arena Night", sub: "Citywide tour" },
-    { img: rooftopImg, title: "Rooftop Cinema", sub: "Fridays 8pm" },
-    { img: theatreImg, title: "Old Town Theatre", sub: "Matinee daily" },
-  ];
-  const seq = [...slides, ...slides];
 
-  return (
-    <section className="px-6 pb-16 text-white">
-      <div className="mx-auto max-w-7xl overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-        <div className="relative flex animate-[kbmarquee_30s_linear_infinite]">
-          {seq.map((s, i) => (
-            <div key={i} className="relative h-56 min-w-[70%] md:h-72 md:min-w-[40%] overflow-hidden">
-              <motion.img
-                src={s.img}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                initial={{ scale: 1.05, x: 0 }}
-                whileInView={{ scale: 1.18, x: 15 }}
-                transition={{ duration: 10, ease: "linear" }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/0" />
-              <div className="absolute bottom-3 left-4">
-                <div className="text-sm text-white/80">{s.sub}</div>
-                <div className="text-xl font-semibold">{s.title}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <style>{`
-        @keyframes kbmarquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
-        @media (prefers-reduced-motion: reduce) { .animate-[kbmarquee_30s_linear_infinite]{animation:none} }
-      `}</style>
-    </section>
-  );
-}
+
 
 /* --------------------------------- Events ---------------------------------- */
 function EventStrip() {
   const ev = [
-    { title: "Arena Night: The Tour", sub: "Doha • Aug 28", img: arenaImg },
-    { title: "Old Town Theatre", sub: "Matinee • Daily", img: theatreImg },
-    { title: "Rooftop Cinema", sub: "Fridays 8pm", img: rooftopImg },
+    { title: "Arena Night: The Tour", sub: "Doha • Aug 28", img: "/images/event_arena.jpeg" },
+    { title: "Old Town Theatre",      sub: "Matinee • Daily", img: "/images/event_theatre.avif" },
+    { title: "Rooftop Cinema",        sub: "Fridays 8pm",     img: "/images/event_rooftop.jpeg" },
   ];
+
   return (
     <section className="px-6 pb-24 text-white">
       <div className="mx-auto max-w-7xl">
@@ -765,7 +827,8 @@ function EventStrip() {
               >
                 <motion.img
                   src={e.img}
-                  alt=""
+                  onError={(img) => { (img.currentTarget as HTMLImageElement).src = "/images/fallback.jpg"; }}
+                  alt={e.title}
                   className="h-60 w-full object-cover"
                   whileHover={{ scale: 1.1, filter: "blur(1px)" }}
                   transition={{ duration: 0.6 }}
@@ -783,6 +846,7 @@ function EventStrip() {
     </section>
   );
 }
+
 
 /* ------------------------------- PAGE -------------------------------------- */
 export default function RedRouteLandingUltra() {

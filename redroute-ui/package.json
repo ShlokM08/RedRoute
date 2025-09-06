@@ -7,10 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seed": "node prisma/seed.mjs"
   },
-  
   "dependencies": {
+    "@prisma/client": "^6.15.0",
     "@radix-ui/react-slot": "^1.2.3",
     "@react-three/drei": "^10.7.4",
     "@react-three/fiber": "^9.3.0",
@@ -28,6 +29,7 @@
     "@tailwindcss/postcss": "^4.1.12",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
+    "@vercel/node": "^5.3.21",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.33.0",
@@ -35,11 +37,12 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
     "postcss": "^8.5.6",
+    "prisma": "^6.15.0",
     "sharp": "^0.34.3",
     "tailwindcss": "^4.1.12",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.1",
+    "vercel": "^47.0.5",
     "vite": "^7.1.2"
   }
-  
 }
