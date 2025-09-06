@@ -682,51 +682,27 @@ function Featured() {
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const r = await fetch("/api/hotels", {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          cache: "no-store", // avoid stale cache
-        });
-
-        const ct = r.headers.get("content-type") || "";
-
-        if (!r.ok) {
-          // Try to read JSON error
-          let message = `HTTP ${r.status}`;
-          try {
-            const j = await r.json();
-            if (j?.error) message += ` – ${j.error}${j.code ? ` (${j.code})` : ""}`;
-          } catch {
-            // ignore
-          }
-          throw new Error(message);
-        }
-
-        if (!ct.includes("application/json")) {
-          // If a dev server or HTML leak hits this route, you’ll see it
-          throw new Error(`Got non-JSON (${ct || "no content-type"})`);
-        }
-
-        const data: Hotel[] = await r.json();
-        if (!cancelled) setItems(data);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Failed to load hotels");
-      } finally {
-        if (!cancelled) setLoading(false);
+  (async () => {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/hotels", { credentials: "include" });
+      if (!r.ok) {
+        const maybeJson = await r.json().catch(() => null);
+        const msg =
+          maybeJson?.error ??
+          `HTTP ${r.status}`; // falls back to plain code if no JSON
+        throw new Error(msg);
       }
-    })();
+      const data = await r.json();
+      setItems(data);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load hotels");
+    } finally {
+      setLoading(false);
+    }
+  })();
+}, []);
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   return (
     <section id="featured" className="px-6 py-16 text-white">
