@@ -118,7 +118,7 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-2 rounded-2xl p-2 text-white/90">
+    <div role="group" className="flex flex-col gap-2 rounded-2xl p-2 text-white/90">
       <div className="flex items-center gap-2 text-sm opacity-80 min-h-[20px]">
         {icon != null && (
           <span className="grid place-content-center rounded-md border border-white/15 bg-white/10 p-1">
@@ -128,7 +128,7 @@ function Field({
         <span>{label}</span>
       </div>
       {children}
-    </label>
+    </div>
   );
 }
 
