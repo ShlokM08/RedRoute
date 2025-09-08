@@ -25,6 +25,7 @@ import {
   Sparkles,
   TimerReset,
   ShieldCheck,
+  Check,
 } from "lucide-react";
 
 /* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
@@ -110,16 +111,18 @@ function Field({
   label,
   children,
 }: {
-  icon: React.ReactNode;
-  label: string;
+  icon?: React.ReactNode;
+  label: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <label className="flex flex-col gap-2 rounded-2xl p-2 text-white/90">
-      <div className="flex items-center gap-2 text-sm opacity-80">
-        <span className="grid place-content-center rounded-md border border-white/15 bg-white/10 p-1">
-          {icon}
-        </span>
+      <div className="flex items-center gap-2 text-sm opacity-80 min-h-[20px]">
+        {icon != null && (
+          <span className="grid place-content-center rounded-md border border-white/15 bg-white/10 p-1">
+            {icon}
+          </span>
+        )}
         <span>{label}</span>
       </div>
       {children}
@@ -139,10 +142,7 @@ function TiltCard({ children }: { children: React.ReactNode }) {
     ry.set(clamp((x - 0.5) * 16, -8, 8));
     rx.set(clamp(-(y - 0.5) * 16, -8, 8));
   }
-  function onLeave() {
-    rx.set(0);
-    ry.set(0);
-  }
+  function onLeave() { rx.set(0); ry.set(0); }
 
   return (
     <motion.div
@@ -217,7 +217,7 @@ const isWithin = (d: Date, a: Date | null, b: Date | null) => {
 const fmtShort = (d: Date) =>
   d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-/* Match Dates input look for plain inputs */
+/* ------------------------ INPUT PRIMITIVE (used by picker) ------------------ */
 function PillInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
@@ -231,6 +231,199 @@ function PillInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
+/* ------------------------ DESTINATION PICKER (autocomplete) ---------------- */
+type Destination = {
+  id: string;
+  label: string;       // e.g., "Paris, France"
+  meta?: string;       // e.g., "City • Europe"
+  emoji?: string;
+  group: "Popular" | "Cities" | "Regions";
+  tokens: string;      // precomputed lowercase search tokens
+};
+
+const DESTINATIONS: Destination[] = [
+  // Popular
+  { id: "doha",     label: "Doha, Qatar",          meta: "Popular • Middle East", emoji: "🏜️", group: "Popular", tokens: "doha qatar middle east" },
+  { id: "dubai",    label: "Dubai, UAE",           meta: "Popular • Middle East", emoji: "🏙️", group: "Popular", tokens: "dubai uae united arab emirates middle east" },
+  { id: "paris",    label: "Paris, France",        meta: "Popular • Europe",      emoji: "🗼", group: "Popular", tokens: "paris france europe" },
+  { id: "bali",     label: "Bali, Indonesia",      meta: "Popular • Asia",        emoji: "🏖️", group: "Popular", tokens: "bali indonesia asia denpasar" },
+  { id: "london",   label: "London, United Kingdom", meta: "Popular • Europe",   emoji: "🎡", group: "Popular", tokens: "london uk united kingdom england europe" },
+
+  // Cities
+  { id: "rome",     label: "Rome, Italy",          meta: "City • Europe",  emoji: "🏛️", group: "Cities",  tokens: "rome italy europe" },
+  { id: "barcelona",label: "Barcelona, Spain",     meta: "City • Europe",  emoji: "🏖️", group: "Cities",  tokens: "barcelona spain europe" },
+  { id: "istanbul", label: "Istanbul, Türkiye",    meta: "City • Europe/Asia", emoji: "🕌", group: "Cities", tokens: "istanbul turkey türkiye eurasia" },
+  { id: "newyork",  label: "New York, USA",        meta: "City • North America", emoji: "🗽", group: "Cities", tokens: "new york nyc usa united states america" },
+  { id: "tokyo",    label: "Tokyo, Japan",         meta: "City • Asia",    emoji: "🏮", group: "Cities",  tokens: "tokyo japan asia" },
+
+  // Regions
+  { id: "amalfi",   label: "Amalfi Coast, Italy",  meta: "Region • Europe", emoji: "🌊", group: "Regions", tokens: "amalfi coast italy europe" },
+  { id: "alps",     label: "Swiss Alps, Switzerland", meta: "Region • Europe", emoji: "🏔️", group: "Regions", tokens: "swiss alps switzerland europe mountains" },
+  { id: "riviera",  label: "French Riviera, France",  meta: "Region • Europe", emoji: "🌞", group: "Regions", tokens: "french riviera cote d azur france europe nice cannes monaco" },
+  { id: "bavaria",  label: "Bavaria, Germany",     meta: "Region • Europe", emoji: "🏰", group: "Regions", tokens: "bavaria germany europe munich" },
+  { id: "maldives", label: "Maldives",             meta: "Region • Indian Ocean", emoji: "🏝️", group: "Regions", tokens: "maldives indian ocean resort islands" },
+];
+
+function normalize(s: string) {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function DestinationPicker() {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  const filtered = useMemo(() => {
+    const q = normalize(query);
+    if (!q) return DESTINATIONS;
+    return DESTINATIONS.filter((d) => d.tokens.includes(q));
+  }, [query]);
+
+  const grouped = useMemo(() => {
+    const out: Record<Destination["group"], Destination[]> = { Popular: [], Cities: [], Regions: [] };
+    for (const d of filtered) out[d.group].push(d);
+    return out;
+  }, [filtered]);
+
+  // Ensure an active id exists when opening / filtering
+  useEffect(() => {
+    if (!open) return;
+    if (filtered.length === 0) { setActive(null); return; }
+    const current = filtered.find((d) => d.id === active);
+    if (!current) setActive(filtered[0].id);
+  }, [open, filtered, active]);
+
+  // Click outside to close
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!open) return;
+      const t = e.target as Node;
+      if (rootRef.current && !rootRef.current.contains(t)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  // Keyboard navigation
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!open) { setOpen(true); return; }
+      const idx = filtered.findIndex((d) => d.id === active);
+      const next = filtered[Math.min(idx + 1, filtered.length - 1)];
+      if (next) setActive(next.id);
+      scrollIntoView(next?.id);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!open) { setOpen(true); return; }
+      const idx = filtered.findIndex((d) => d.id === active);
+      const prev = filtered[Math.max(idx - 1, 0)];
+      if (prev) setActive(prev.id);
+      scrollIntoView(prev?.id);
+    } else if (e.key === "Enter") {
+      if (!open) return;
+      e.preventDefault();
+      const sel = filtered.find((d) => d.id === active) ?? filtered[0];
+      if (sel) {
+        setQuery(sel.label);
+        setOpen(false);
+      }
+    } else if (e.key === "Escape") {
+      if (open) { e.preventDefault(); setOpen(false); }
+    }
+  }
+
+  function scrollIntoView(id?: string) {
+    if (!id || !listRef.current) return;
+    const el = listRef.current.querySelector<HTMLButtonElement>(`[data-id="${id}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }
+
+  function select(d: Destination) {
+    setQuery(d.label);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <PillInput
+        role="combobox"
+        aria-expanded={open}
+        aria-controls="destination-listbox"
+        aria-activedescendant={active ? `dest-${active}` : undefined}
+        placeholder="Where to?"
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
+        autoComplete="off"
+        spellCheck={false}
+      />
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 240, damping: 22 }}
+            className="absolute z-50 mt-2 w-[360px] max-h-[320px] overflow-auto rounded-2xl border border-white/12 bg-[rgba(0,0,0,0.75)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
+            id="destination-listbox"
+            role="listbox"
+            ref={listRef}
+          >
+            {["Popular", "Cities", "Regions"].map((g) => {
+              const items = (grouped as any)[g] as Destination[];
+              if (!items || items.length === 0) return null;
+              return (
+                <div key={g} className="px-2 py-2">
+                  <div className="sticky top-0 z-10 -mx-2 mb-2 border-b border-white/10 bg-white/[0.06] px-3 py-1.5 text-[11px] font-semibold text-white/75">
+                    {g}
+                  </div>
+                  {items.map((d) => {
+                    const isActive = active === d.id;
+                    const isSelected = normalize(query) === normalize(d.label);
+                    return (
+                      <button
+                        type="button"
+                        key={d.id}
+                        data-id={d.id}
+                        id={`dest-${d.id}`}
+                        role="option"
+                        aria-selected={isSelected}
+                        onMouseEnter={() => setActive(d.id)}
+                        onClick={() => select(d)}
+                        className={[
+                          "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm",
+                          "hover:bg-white/10 focus:bg-white/10",
+                          isActive ? "bg-white/10" : "",
+                        ].join(" ")}
+                      >
+                        <span className="text-lg">{d.emoji ?? "📍"}</span>
+                        <span className="flex-1">
+                          <div className="leading-tight">{d.label}</div>
+                          {d.meta && <div className="text-[11px] text-white/60">{d.meta}</div>}
+                        </span>
+                        {isSelected && <Check className="size-4 opacity-80" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="px-4 py-6 text-sm text-white/70">No matches. Try a city, country, or region.</div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ----------------------- CALENDAR POPOVER (unchanged) ---------------------- */
 function CalendarPopover() {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement | null>(null);
@@ -468,6 +661,7 @@ function SiteFooter() {
 function Hero() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // cursor glow & parallax
   const mx = useMotionValue(0.5);
   const my = useMotionValue(0.5);
   const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
@@ -494,6 +688,7 @@ function Hero() {
 
   return (
     <section className="relative text-white">
+      {/* OUTER BANNER (video) */}
       <div className="relative h-[55vh] md:h-[48vh] w-full overflow-hidden">
         <video
           ref={videoRef}
@@ -509,6 +704,7 @@ function Hero() {
         <div className="absolute inset-0 -z-10 bg-black/28" />
         <div className="absolute inset-0 -z-10 [background:radial-gradient(900px_circle_at_20%_10%,rgba(229,9,20,0.20),transparent_60%),radial-gradient(900px_circle_at_85%_15%,rgba(255,107,107,0.16),transparent_65%)]" />
 
+        {/* rotating beams */}
         <div className="pointer-events-none absolute -left-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-25 mix-blend-screen">
           <div className="h-full w-full animate-[spin_36s_linear_infinite] [background:conic-gradient(from_0deg_at_50%_50%,rgba(229,9,20,0.28),transparent_30%,rgba(255,255,255,0.14),transparent_60%,rgba(229,9,20,0.22),transparent_90%)]" />
         </div>
@@ -516,14 +712,18 @@ function Hero() {
           <div className="h-full w-full animate-[spin_48s_linear_infinite_reverse] [background:conic-gradient(from_140deg_at_50%_50%,rgba(255,255,255,0.12),transparent_25%,rgba(229,9,20,0.22),transparent_65%,rgba(255,255,255,0.12),transparent_95%)]" />
         </div>
 
+        {/* INNER BANNER (glass) */}
         <div className="absolute inset-0 grid place-items-center px-4" onMouseMove={onMove}>
           <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-hidden">
+            {/* cursor glow */}
             <motion.div
-              className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
+              className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full
+                         bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
               style={{ left: glowX, top: glowY, translateX: "-50%", translateY: "-50%" }}
             />
 
             <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
+              {/* LEFT: headline + actions */}
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
                 <Kinetic text="Welcome to RedRoute" className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
@@ -539,11 +739,11 @@ function Hero() {
                 </div>
               </motion.div>
 
-              {/* Search panel */}
+              {/* RIGHT: compact search */}
               <motion.div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur" style={{ transform: pPanel }}>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
                   <Field icon={<MapPin className="size-4" />} label="Destination">
-                    <PillInput placeholder="Where to?" />
+                    <DestinationPicker />
                   </Field>
 
                   <Field icon={<Calendar className="size-4" />} label="Dates">
@@ -554,14 +754,13 @@ function Hero() {
                     <PillInput placeholder="2 Adults" />
                   </Field>
 
-                  {/* Align search with inputs using spacer label */}
-                  <div className="flex flex-col">
-                    <span className="h-5 text-sm opacity-0 select-none">Search</span>
+                  {/* Search aligned like the other fields */}
+                  <Field label={<span className="sr-only">Search</span>}>
                     <Button className="h-10 w-full text-sm rounded-xl relative overflow-hidden">
                       <span className="relative z-10">Search</span>
                       <span className="pointer-events-none absolute inset-0 translate-x-[-120%] bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] animate-[sheen_1.8s_linear_infinite]" />
                     </Button>
-                  </div>
+                  </Field>
                 </div>
 
                 <div className="mt-3 overflow-hidden rounded-xl border border-white/10">
@@ -578,6 +777,7 @@ function Hero() {
           </div>
         </div>
 
+        {/* keyframes */}
         <style>{`
           @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
           @keyframes spin { to { transform: rotate(360deg); } }
