@@ -26,6 +26,8 @@ import {
   TimerReset,
   ShieldCheck,
   Check,
+  Minus,
+  Plus,
 } from "lucide-react";
 
 /* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
@@ -234,34 +236,29 @@ function PillInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
 /* ------------------------ DESTINATION PICKER (autocomplete) ---------------- */
 type Destination = {
   id: string;
-  label: string;       // e.g., "Paris, France"
-  meta?: string;       // e.g., "City • Europe"
+  label: string;
+  meta?: string;
   emoji?: string;
   group: "Popular" | "Cities" | "Regions";
-  tokens: string;      // precomputed lowercase search tokens
+  tokens: string;
 };
 
 const DESTINATIONS: Destination[] = [
-  // Popular
-  { id: "doha",     label: "Doha, Qatar",          meta: "Popular • Middle East", emoji: "🏜️", group: "Popular", tokens: "doha qatar middle east" },
-  { id: "dubai",    label: "Dubai, UAE",           meta: "Popular • Middle East", emoji: "🏙️", group: "Popular", tokens: "dubai uae united arab emirates middle east" },
-  { id: "paris",    label: "Paris, France",        meta: "Popular • Europe",      emoji: "🗼", group: "Popular", tokens: "paris france europe" },
-  { id: "bali",     label: "Bali, Indonesia",      meta: "Popular • Asia",        emoji: "🏖️", group: "Popular", tokens: "bali indonesia asia denpasar" },
-  { id: "london",   label: "London, United Kingdom", meta: "Popular • Europe",   emoji: "🎡", group: "Popular", tokens: "london uk united kingdom england europe" },
-
-  // Cities
-  { id: "rome",     label: "Rome, Italy",          meta: "City • Europe",  emoji: "🏛️", group: "Cities",  tokens: "rome italy europe" },
-  { id: "barcelona",label: "Barcelona, Spain",     meta: "City • Europe",  emoji: "🏖️", group: "Cities",  tokens: "barcelona spain europe" },
-  { id: "istanbul", label: "Istanbul, Türkiye",    meta: "City • Europe/Asia", emoji: "🕌", group: "Cities", tokens: "istanbul turkey türkiye eurasia" },
-  { id: "newyork",  label: "New York, USA",        meta: "City • North America", emoji: "🗽", group: "Cities", tokens: "new york nyc usa united states america" },
-  { id: "tokyo",    label: "Tokyo, Japan",         meta: "City • Asia",    emoji: "🏮", group: "Cities",  tokens: "tokyo japan asia" },
-
-  // Regions
-  { id: "amalfi",   label: "Amalfi Coast, Italy",  meta: "Region • Europe", emoji: "🌊", group: "Regions", tokens: "amalfi coast italy europe" },
-  { id: "alps",     label: "Swiss Alps, Switzerland", meta: "Region • Europe", emoji: "🏔️", group: "Regions", tokens: "swiss alps switzerland europe mountains" },
-  { id: "riviera",  label: "French Riviera, France",  meta: "Region • Europe", emoji: "🌞", group: "Regions", tokens: "french riviera cote d azur france europe nice cannes monaco" },
-  { id: "bavaria",  label: "Bavaria, Germany",     meta: "Region • Europe", emoji: "🏰", group: "Regions", tokens: "bavaria germany europe munich" },
-  { id: "maldives", label: "Maldives",             meta: "Region • Indian Ocean", emoji: "🏝️", group: "Regions", tokens: "maldives indian ocean resort islands" },
+  { id: "doha",     label: "Doha, Qatar",            meta: "Popular • Middle East", emoji: "🏜️", group: "Popular", tokens: "doha qatar middle east" },
+  { id: "dubai",    label: "Dubai, UAE",             meta: "Popular • Middle East", emoji: "🏙️", group: "Popular", tokens: "dubai uae united arab emirates middle east" },
+  { id: "paris",    label: "Paris, France",          meta: "Popular • Europe",      emoji: "🗼", group: "Popular", tokens: "paris france europe" },
+  { id: "bali",     label: "Bali, Indonesia",        meta: "Popular • Asia",        emoji: "🏖️", group: "Popular", tokens: "bali indonesia asia denpasar" },
+  { id: "london",   label: "London, United Kingdom", meta: "Popular • Europe",      emoji: "🎡", group: "Popular", tokens: "london uk united kingdom england europe" },
+  { id: "rome",     label: "Rome, Italy",            meta: "City • Europe",  emoji: "🏛️", group: "Cities",  tokens: "rome italy europe" },
+  { id: "barcelona",label: "Barcelona, Spain",       meta: "City • Europe",  emoji: "🏖️", group: "Cities",  tokens: "barcelona spain europe" },
+  { id: "istanbul", label: "Istanbul, Türkiye",      meta: "City • Europe/Asia", emoji: "🕌", group: "Cities", tokens: "istanbul turkey türkiye eurasia" },
+  { id: "newyork",  label: "New York, USA",          meta: "City • North America", emoji: "🗽", group: "Cities", tokens: "new york nyc usa united states america" },
+  { id: "tokyo",    label: "Tokyo, Japan",           meta: "City • Asia",    emoji: "🏮", group: "Cities",  tokens: "tokyo japan asia" },
+  { id: "amalfi",   label: "Amalfi Coast, Italy",    meta: "Region • Europe", emoji: "🌊", group: "Regions", tokens: "amalfi coast italy europe" },
+  { id: "alps",     label: "Swiss Alps, Switzerland",meta: "Region • Europe", emoji: "🏔️", group: "Regions", tokens: "swiss alps switzerland europe mountains" },
+  { id: "riviera",  label: "French Riviera, France", meta: "Region • Europe", emoji: "🌞", group: "Regions", tokens: "french riviera cote d azur france europe nice cannes monaco" },
+  { id: "bavaria",  label: "Bavaria, Germany",       meta: "Region • Europe", emoji: "🏰", group: "Regions", tokens: "bavaria germany europe munich" },
+  { id: "maldives", label: "Maldives",               meta: "Region • Indian Ocean", emoji: "🏝️", group: "Regions", tokens: "maldives indian ocean resort islands" },
 ];
 
 function normalize(s: string) {
@@ -287,7 +284,6 @@ function DestinationPicker() {
     return out;
   }, [filtered]);
 
-  // Ensure an active id exists when opening / filtering
   useEffect(() => {
     if (!open) return;
     if (filtered.length === 0) { setActive(null); return; }
@@ -295,7 +291,6 @@ function DestinationPicker() {
     if (!current) setActive(filtered[0].id);
   }, [open, filtered, active]);
 
-  // Click outside to close
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!open) return;
@@ -306,7 +301,6 @@ function DestinationPicker() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [open]);
 
-  // Keyboard navigation
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -326,10 +320,7 @@ function DestinationPicker() {
       if (!open) return;
       e.preventDefault();
       const sel = filtered.find((d) => d.id === active) ?? filtered[0];
-      if (sel) {
-        setQuery(sel.label);
-        setOpen(false);
-      }
+      if (sel) { setQuery(sel.label); setOpen(false); }
     } else if (e.key === "Escape") {
       if (open) { e.preventDefault(); setOpen(false); }
     }
@@ -416,6 +407,148 @@ function DestinationPicker() {
             {filtered.length === 0 && (
               <div className="px-4 py-6 text-sm text-white/70">No matches. Try a city, country, or region.</div>
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ----------------------- GUESTS POPOVER (adults/kids) ---------------------- */
+type Guests = { adults: number; kids: number };
+const MIN_ADULTS = 1;
+const MAX_TOTAL = 10;
+
+function GuestsPopover() {
+  const [open, setOpen] = useState(false);
+  const [g, setG] = useState<Guests>({ adults: 2, kids: 0 });
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  const total = g.adults + g.kids;
+  const label = useMemo(() => {
+    const parts: string[] = [];
+    parts.push(`${g.adults} ${g.adults === 1 ? "Adult" : "Adults"}`);
+    if (g.kids > 0) parts.push(`${g.kids} ${g.kids === 1 ? "Kid" : "Kids"}`);
+    return parts.join(", ") || "Guests";
+  }, [g]);
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!open) return;
+      const t = e.target as Node;
+      if (rootRef.current && !rootRef.current.contains(t)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  function bump(key: keyof Guests, delta: number) {
+    setG((prev) => {
+      let next = { ...prev, [key]: prev[key] + delta } as Guests;
+      // clamp rules
+      if (key === "adults") next.adults = Math.max(MIN_ADULTS, next.adults);
+      next.kids = Math.max(0, next.kids);
+      // respect MAX_TOTAL
+      if (next.adults + next.kids > MAX_TOTAL) {
+        // roll back the change
+        return prev;
+      }
+      return next;
+    });
+  }
+
+  function Row({ title, note, value, onMinus, onPlus, disabledMinus, disabledPlus }: {
+    title: string; note?: string; value: number;
+    onMinus: () => void; onPlus: () => void;
+    disabledMinus?: boolean; disabledPlus?: boolean;
+  }) {
+    return (
+      <div className="flex items-center justify-between gap-4 py-2">
+        <div>
+          <div className="text-sm">{title}</div>
+          {note && <div className="text-[11px] text-white/60">{note}</div>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onMinus}
+            disabled={disabledMinus}
+            className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white/10 hover:bg-white/20 disabled:opacity-40"
+            aria-label={`Decrease ${title}`}
+          >
+            <Minus className="size-4" />
+          </button>
+          <div className="w-6 text-center text-sm tabular-nums">{value}</div>
+          <button
+            type="button"
+            onClick={onPlus}
+            disabled={disabledPlus}
+            className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white/10 hover:bg-white/20 disabled:opacity-40"
+            aria-label={`Increase ${title}`}
+          >
+            <Plus className="size-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="h-10 w-full rounded-xl px-3 text-left text-sm border border-white/15 bg-white/5 text-white/90 hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-red-600/60"
+        aria-expanded={open}
+        aria-haspopup="dialog"
+      >
+        {label}
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 240, damping: 20 }}
+            className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg-[rgba(0,0,0,0.75)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)] p-3"
+            role="dialog"
+          >
+            <div className="px-1 text-[11px] text-white/60">Max {MAX_TOTAL} guests total</div>
+            <Row
+              title="Adults"
+              note="Ages 13+"
+              value={g.adults}
+              onMinus={() => bump("adults", -1)}
+              onPlus={() => bump("adults", +1)}
+              disabledMinus={g.adults <= MIN_ADULTS}
+              disabledPlus={total >= MAX_TOTAL}
+            />
+            <Row
+              title="Kids"
+              note="Ages 2–12"
+              value={g.kids}
+              onMinus={() => bump("kids", -1)}
+              onPlus={() => bump("kids", +1)}
+              disabledMinus={g.kids <= 0}
+              disabledPlus={total >= MAX_TOTAL}
+            />
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <button
+                className="text-[12px] underline text-white/80 hover:text-white"
+                onClick={() => setG({ adults: 2, kids: 0 })}
+              >
+                Reset
+              </button>
+              <Button
+                className="h-9 rounded-xl px-4 text-sm"
+                onClick={() => setOpen(false)}
+                style={{ background: RR.red }}
+              >
+                Done
+              </Button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -531,7 +664,7 @@ function CalendarPopover() {
 
             <div className="px-3 py-2">
               <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
-                {dow.map((d) => (
+                {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d) => (
                   <div key={d} className="py-1">{d}</div>
                 ))}
               </div>
@@ -565,7 +698,7 @@ function CalendarPopover() {
                 <span>Pick start, then end</span>
                 <button
                   className="underline hover:text-white"
-                  onClick={() => { setStart(null); setEnd(null); }}
+                  onClick={() => { /* clear */ }}
                 >
                   Clear
                 </button>
@@ -717,8 +850,7 @@ function Hero() {
           <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-hidden">
             {/* cursor glow */}
             <motion.div
-              className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full
-                         bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
+              className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
               style={{ left: glowX, top: glowY, translateX: "-50%", translateY: "-50%" }}
             />
 
@@ -751,10 +883,10 @@ function Hero() {
                   </Field>
 
                   <Field icon={<User className="size-4" />} label="Guests">
-                    <PillInput placeholder="2 Adults" />
+                    <GuestsPopover />
                   </Field>
 
-                  {/* Search aligned like the other fields */}
+                  {/* Search aligned exactly like the other fields */}
                   <Field label={<span className="sr-only">Search</span>}>
                     <Button className="h-10 w-full text-sm rounded-xl relative overflow-hidden">
                       <span className="relative z-10">Search</span>
