@@ -3,13 +3,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-/** 👉 Change this if your RedRouteLandingUltra page uses a different path */
+/** Route where RedRouteLandingUltra is mounted */
 const LANDING_ROUTE = '/app';
-
-/** Leave empty when using Vite proxy; otherwise put your API origin */
+/** Leave empty to use Vite proxy; otherwise put API origin */
 const API_BASE = '';
 
-/* -------------------------------- UI helpers ------------------------------- */
+/* ---------------------------------------------------------------------- */
+/* Reusable UI bits                                                       */
+/* ---------------------------------------------------------------------- */
 interface FormInputProps {
   icon: React.ReactNode;
   type: string;
@@ -46,8 +47,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, id }) =>
   </div>
 );
 
-interface VideoBackgroundProps { videoUrl: string; }
-export const VideoBackground: React.FC<VideoBackgroundProps> = ({ videoUrl }) => {
+export const VideoBackground: React.FC<{ videoUrl: string }> = ({ videoUrl }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => { videoRef.current?.play().catch(() => {}); }, []);
   return (
@@ -64,10 +64,17 @@ export const VideoBackground: React.FC<VideoBackgroundProps> = ({ videoUrl }) =>
   );
 };
 
-/* ----------------------------- Login/Register ----------------------------- */
+/* ---------------------------------------------------------------------- */
+/* Login + Register                                                       */
+/* ---------------------------------------------------------------------- */
 type Mode = 'login' | 'register';
 
-export const LoginForm: React.FC = () => {
+export interface LoginFormProps {
+  /** Optional callback; we still navigate to LANDING_ROUTE on success */
+  onSubmit?: (email: string, password: string, remember: boolean, mode: Mode) => void;
+}
+
+export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<Mode>('login');
@@ -82,15 +89,15 @@ export const LoginForm: React.FC = () => {
   const title = mode === 'login' ? 'Welcome back' : 'Create your account';
   const cta   = submitting ? (mode === 'login' ? 'Logging in…' : 'Creating…') : (mode === 'login' ? 'Login' : 'Create Account');
 
-  function resetErr() { setError(null); }
+  const resetErr = () => setError(null);
 
-  function validate(): string | null {
+  const validate = (): string | null => {
     if (!email || !password) return 'Please fill out all fields.';
     if (!/\S+@\S+\.\S+/.test(email)) return 'Enter a valid email.';
     if (password.length < 6) return 'Password should be at least 6 characters.';
     if (mode === 'register' && password !== password2) return 'Passwords do not match.';
     return null;
-  }
+  };
 
   async function call(path: string, body: any) {
     const r = await fetch(`${API_BASE}/api/auth/${path}`, {
@@ -104,7 +111,7 @@ export const LoginForm: React.FC = () => {
     return data;
   }
 
-  async function onSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     resetErr();
     const v = validate();
@@ -116,9 +123,11 @@ export const LoginForm: React.FC = () => {
       } else {
         await call('login', { email, password, remember });
       }
-      // mark access and go to landing
+      onSubmit?.(email, password, remember, mode);
+
+      // mark access for your existing checks and go to landing
       localStorage.removeItem('rr_guest');
-      localStorage.setItem('rr_demo_user', 'auth'); // if your app checks this
+      localStorage.setItem('rr_demo_user', 'auth');
       navigate(LANDING_ROUTE, { replace: true });
     } catch (err: any) {
       setError(err?.message || 'Something went wrong.');
@@ -143,7 +152,7 @@ export const LoginForm: React.FC = () => {
         <p className="text-white/80 mt-2">{title}</p>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-6" noValidate>
+      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
         <FormInput
           icon={<Mail className="text-white/60" size={18} />}
           type="email"
@@ -239,6 +248,6 @@ export const LoginForm: React.FC = () => {
   );
 };
 
-/* Export shape matches your existing usage */
+/* Keep the same export shape you were using */
 const LoginPage = { LoginForm, VideoBackground };
 export default LoginPage;
