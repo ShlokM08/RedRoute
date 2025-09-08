@@ -147,7 +147,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
       <div className="mb-8 text-center">
         <h2 className="text-3xl font-bold mb-2 relative group">
           <span className="absolute -inset-1 bg-gradient-to-r from-purple-600/30 via-pink-500/30 to-blue-500/30 blur-xl opacity-75 group-hover:opacity-100 transition-all duration-500" />
-          <span className="relative inline-block text-3xl font-bold mb-2 text-white">Red Route</span>
+          <span className="relative inline-block text-3xl font-bold mb-2 text-white">RedRoute</span>
         </h2>
         <p className="text-white/80 mt-2">{title}</p>
       </div>
