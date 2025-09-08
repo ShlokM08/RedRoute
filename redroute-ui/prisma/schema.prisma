@@ -7,6 +7,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/* ======================= NEW: User (for auth) ======================= */
+model User {
+  id           String   @id @default(cuid())  // works with JWT 'sub'
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  bookings     Booking[]
+  favorites    Favorite[]
+}
+
+/* ====================== Your existing models ======================== */
+
 model Hotel {
   id          Int          @id @default(autoincrement())
   name        String
@@ -14,7 +28,7 @@ model Hotel {
   price       Int
   rating      Float
   description String?
-  images      HotelImage[] // <- relation used by your seed
+  images      HotelImage[] // relation used by your seed
   bookings    Booking[]
   favorites   Favorite[]
   createdAt   DateTime     @default(now())
@@ -27,28 +41,37 @@ model HotelImage {
   alt     String?
   hotelId Int
   hotel   Hotel   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
 }
 
 model Booking {
   id        Int       @id @default(autoincrement())
   hotelId   Int
-  userId    String? // nullable is fine if you want anonymous bookings
-  startDate DateTime? // optional
-  endDate   DateTime? // optional
+  userId    String?   // now FK -> User.id (nullable is fine)
+  startDate DateTime?
+  endDate   DateTime?
   guests    Int       @default(2)
   status    String
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  hotel Hotel @relation(fields: [hotelId], references: [id])
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([hotelId])
+  @@index([userId])
 }
 
 model Favorite {
   id        Int      @id @default(autoincrement())
   hotelId   Int
-  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   userId    String
   createdAt DateTime @default(now())
 
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([hotelId, userId])
+  @@index([userId])
 }
