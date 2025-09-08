@@ -614,7 +614,7 @@ function CalendarPopover() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+//  const //dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const isSelected = useCallback(
     (d: Date) =>
       (start && isSameDate(d, start)) || (end && isSameDate(d, end)),
@@ -847,7 +847,7 @@ function Hero() {
 
         {/* INNER BANNER (glass) */}
         <div className="absolute inset-0 grid place-items-center px-4" onMouseMove={onMove}>
-          <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-hidden">
+<div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-visible">
             {/* cursor glow */}
             <motion.div
               className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
