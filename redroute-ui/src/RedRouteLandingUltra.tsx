@@ -211,7 +211,7 @@ const isWithin = (d: Date, a: Date | null, b: Date | null) => {
   if (!a || !b) return false;
   const t = +new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const t1 = +new Date(a.getFullYear(), a.getMonth(), a.getDate());
-  const t2 = +new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  const t2 = +new Date(b.getFullYear?.() ?? b.getFullYear(), b.getMonth(), b.getDate()); // defensive
   const [min, max] = t1 <= t2 ? [t1, t2] : [t2, t1];
   return t > min && t < max;
 };
@@ -445,14 +445,9 @@ function GuestsPopover() {
   function bump(key: keyof Guests, delta: number) {
     setG((prev) => {
       let next = { ...prev, [key]: prev[key] + delta } as Guests;
-      // clamp rules
       if (key === "adults") next.adults = Math.max(MIN_ADULTS, next.adults);
       next.kids = Math.max(0, next.kids);
-      // respect MAX_TOTAL
-      if (next.adults + next.kids > MAX_TOTAL) {
-        // roll back the change
-        return prev;
-      }
+      if (next.adults + next.kids > MAX_TOTAL) return prev;
       return next;
     });
   }
@@ -614,7 +609,7 @@ function CalendarPopover() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-//  const //dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const dow = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const isSelected = useCallback(
     (d: Date) =>
       (start && isSameDate(d, start)) || (end && isSameDate(d, end)),
@@ -664,7 +659,7 @@ function CalendarPopover() {
 
             <div className="px-3 py-2">
               <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
-                {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d) => (
+                {dow.map((d) => (
                   <div key={d} className="py-1">{d}</div>
                 ))}
               </div>
@@ -696,10 +691,7 @@ function CalendarPopover() {
 
               <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-white/60">
                 <span>Pick start, then end</span>
-                <button
-                  className="underline hover:text-white"
-                  onClick={() => { /* clear */ }}
-                >
+                <button className="underline hover:text-white" onClick={() => { /* add clear if desired */ }}>
                   Clear
                 </button>
               </div>
@@ -713,38 +705,18 @@ function CalendarPopover() {
 
 function Testimonials() {
   const quotes = [
-    {
-      name: "Aman Mehra",
-      role: "Product Lead",
-      text:
-        "RedRoute feels like a movie trailer — fast, beautiful, and I’m checked out in seconds.",
-      initials: "AM",
-      rating: 5,
-    },
-    {
-      name: "Sara Khan",
-      role: "Event Planner",
-      text:
-        "Searching hotels + events in one flow is brilliant. The micro-interactions are 👌",
-      initials: "SK",
-      rating: 5,
-    },
+    { name: "Aman Mehra", role: "Product Lead", text: "RedRoute feels like a movie trailer — fast, beautiful, and I’m checked out in seconds.", initials: "AM", rating: 5 },
+    { name: "Sara Khan", role: "Event Planner", text: "Searching hotels + events in one flow is brilliant. The micro-interactions are 👌", initials: "SK", rating: 5 },
   ];
-
   return (
     <section className="px-6 pb-16 text-white">
       <div className="mx-auto max-w-7xl">
         <h2 className="mb-6 text-3xl font-bold">What people say</h2>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {quotes.map((q) => (
-            <div
-              key={q.name}
-              className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur"
-            >
+            <div key={q.name} className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
               <div className="flex items-start gap-4">
-                <div className="grid h-12 w-12 place-items-center rounded-full bg-white/15 text-sm font-semibold">
-                  {q.initials}
-                </div>
+                <div className="grid h-12 w-12 place-items-center rounded-full bg-white/15 text-sm font-semibold">{q.initials}</div>
                 <div className="flex-1">
                   <div className="mb-2 flex gap-1 text-white/90">
                     {Array.from({ length: q.rating }).map((_, i) => (
@@ -791,10 +763,9 @@ function SiteFooter() {
 }
 
 /* ----------------------------- HERO SECTION -------------------------------- */
+/** NOTE: Black background only (no video). */
 function Hero() {
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  // cursor glow & parallax
+  // cursor glow & parallax (kept)
   const mx = useMotionValue(0.5);
   const my = useMotionValue(0.5);
   const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
@@ -803,16 +774,6 @@ function Hero() {
   const glowX = useTransform(mx, (v) => `${v * 100}%`);
   const glowY = useTransform(my, (v) => `${v * 100}%`);
 
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    const tryPlay = () => v.play().catch(() => {});
-    tryPlay();
-    const onVis = () => !document.hidden && tryPlay();
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, []);
-
   function onMove(e: React.MouseEvent<HTMLDivElement>) {
     const r = e.currentTarget.getBoundingClientRect();
     mx.set((e.clientX - r.left) / r.width);
@@ -820,23 +781,11 @@ function Hero() {
   }
 
   return (
-    <section className="relative text-white">
-      {/* OUTER BANNER (video) */}
-      <div className="relative h-[55vh] md:h-[48vh] w-full overflow-hidden">
-        <video
-          ref={videoRef}
-          className="absolute inset-0 -z-10 h-full w-full object-cover"
-          src="/s.mp4"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="auto"
-          style={{ filter: "brightness(1.28) contrast(1.07) saturate(1.18)" }}
-        />
-        <div className="absolute inset-0 -z-10 bg-black/28" />
+    <section className="relative text-white z-40 isolate bg-black">
+      {/* OUTER BANNER — black canvas with subtle gradients (no video) */}
+      <div className="relative h-[55vh] md:h-[48vh] w-full overflow-visible">
+        {/* soft overlay gradients */}
         <div className="absolute inset-0 -z-10 [background:radial-gradient(900px_circle_at_20%_10%,rgba(229,9,20,0.20),transparent_60%),radial-gradient(900px_circle_at_85%_15%,rgba(255,107,107,0.16),transparent_65%)]" />
-
         {/* rotating beams */}
         <div className="pointer-events-none absolute -left-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-25 mix-blend-screen">
           <div className="h-full w-full animate-[spin_36s_linear_infinite] [background:conic-gradient(from_0deg_at_50%_50%,rgba(229,9,20,0.28),transparent_30%,rgba(255,255,255,0.14),transparent_60%,rgba(229,9,20,0.22),transparent_90%)]" />
@@ -847,7 +796,7 @@ function Hero() {
 
         {/* INNER BANNER (glass) */}
         <div className="absolute inset-0 grid place-items-center px-4" onMouseMove={onMove}>
-<div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-visible">
+          <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-visible z-30">
             {/* cursor glow */}
             <motion.div
               className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
@@ -886,7 +835,7 @@ function Hero() {
                     <GuestsPopover />
                   </Field>
 
-                  {/* Search aligned exactly like the other fields */}
+                  {/* Search aligned like other fields */}
                   <Field label={<span className="sr-only">Search</span>}>
                     <Button className="h-10 w-full text-sm rounded-xl relative overflow-hidden">
                       <span className="relative z-10">Search</span>
@@ -986,17 +935,9 @@ function StatsStrip() {
             <div className="grid place-items-center rounded-xl bg-white/10 p-2">{it.icon}</div>
             <div>
               <div className="text-xl font-bold">
-                {it.label.includes("rating") ? (
-                  <>
-                    <CountUp value={it.value} />★
-                  </>
-                ) : it.label.includes("time") ? (
-                  <>
-                    <CountUp value={it.value} />s
-                  </>
-                ) : (
-                  <CountUp value={it.value} />
-                )}
+                {it.label.includes("rating") ? (<><CountUp value={it.value} />★</>) :
+                 it.label.includes("time") ? (<><CountUp value={it.value} />s</>) :
+                 (<CountUp value={it.value} />)}
               </div>
               <div className="text-xs text-white/70">{it.label}</div>
             </div>
@@ -1009,14 +950,7 @@ function StatsStrip() {
 
 /* -------------------------------- Featured --------------------------------- */
 type HotelImage = { id: string; url: string; alt?: string | null };
-type Hotel = {
-  id: string;
-  name: string;
-  city: string;
-  price: number;
-  rating: number | null;
-  images: HotelImage[];
-};
+type Hotel = { id: string; name: string; city: string; price: number; rating: number | null; images: HotelImage[]; };
 
 function Featured() {
   const [items, setItems] = React.useState<Hotel[]>([]);
@@ -1058,9 +992,7 @@ function Featured() {
         )}
 
         {!loading && error && (
-          <div className="mt-2 text-red-400 text-base">
-            Couldn’t load hotels: {error}
-          </div>
+          <div className="mt-2 text-red-400 text-base">Couldn’t load hotels: {error}</div>
         )}
 
         {!loading && !error && (
@@ -1166,6 +1098,19 @@ function EventStrip() {
 /* ------------------------------- PAGE -------------------------------------- */
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
+
+  // Ensure login-only videos stop & free resources after navigating here.
+  useEffect(() => {
+    // If your login video has a data attribute, prefer this:
+    // document.querySelectorAll<HTMLVideoElement>('video[data-login-video]').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
+
+    // Generic fallback: pause/unload all videos not inside this page's hero (we don't use a video here anyway).
+    document.querySelectorAll<HTMLVideoElement>("video").forEach((v) => {
+      v.pause();
+      v.removeAttribute("src");
+      try { v.load(); } catch {}
+    });
+  }, []);
 
   useEffect(() => {
     if (!localStorage.getItem("rr_demo_user")) {
