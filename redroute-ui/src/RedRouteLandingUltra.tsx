@@ -823,7 +823,7 @@ function Hero() {
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
                 <Kinetic text={headline} className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
-                  Hotels. Events. Experiences. Your gateway to the time of your life—anywhere, anytime!
+                  Hotels. Events. Experiences. Your gateway to the time of your life-anywhere, anytime!
                 </p>
                 <div className="flex flex-wrap items-center gap-2 md:gap-3">
                   <MagneticButton />
