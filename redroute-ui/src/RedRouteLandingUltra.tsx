@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+
+
 import {
   motion,
   useMotionValue,
@@ -11,7 +13,7 @@ import {
   AnimatePresence,
 } from "framer-motion";
 import { Button } from "./components/ui/button";
-import { Input } from "./components/ui/input";
+
 import {
   Calendar,
   MapPin,
@@ -551,7 +553,7 @@ function GuestsPopover() {
   );
 }
 
-/* ----------------------- CALENDAR POPOVER (unchanged) ---------------------- */
+/* ----------------------- CALENDAR POPOVER (pill-styled) -------------------- */
 function CalendarPopover() {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement | null>(null);
@@ -611,22 +613,23 @@ function CalendarPopover() {
 
   const dow = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const isSelected = useCallback(
-    (d: Date) =>
-      (start && isSameDate(d, start)) || (end && isSameDate(d, end)),
+    (d: Date) => (start && isSameDate(d, start)) || (end && isSameDate(d, end)),
     [start, end]
   );
 
   return (
     <div ref={anchorRef} className="relative">
-      <Input
+      {/* Use the same pill as Destination so styling/height match */}
+      <PillInput
         readOnly
         value={label}
         placeholder="Select dates"
         onClick={() => setOpen(true)}
         onFocus={() => setOpen(true)}
-        className="h-10 text-sm cursor-pointer select-none"
+        role="combobox"
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-label="Select dates"
       />
 
       <AnimatePresence>
@@ -638,6 +641,7 @@ function CalendarPopover() {
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ type: "spring", stiffness: 240, damping: 20 }}
             className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg-[rgba(0,0,0,0.7)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
+            role="dialog"
           >
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.06]">
               <button
@@ -659,9 +663,7 @@ function CalendarPopover() {
 
             <div className="px-3 py-2">
               <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
-                {dow.map((d) => (
-                  <div key={d} className="py-1">{d}</div>
-                ))}
+                {dow.map((d) => (<div key={d} className="py-1">{d}</div>))}
               </div>
 
               <div className="grid grid-cols-7 gap-1">
@@ -691,7 +693,7 @@ function CalendarPopover() {
 
               <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-white/60">
                 <span>Pick start, then end</span>
-                <button className="underline hover:text-white" onClick={() => { /* add clear if desired */ }}>
+                <button className="underline hover:text-white" onClick={() => { setStart(null); setEnd(null); }}>
                   Clear
                 </button>
               </div>
@@ -702,6 +704,8 @@ function CalendarPopover() {
     </div>
   );
 }
+
+
 
 function Testimonials() {
   const quotes = [
@@ -763,6 +767,7 @@ function SiteFooter() {
 }
 
 /* ----------------------------- HERO SECTION -------------------------------- */
+/* ----------------------------- HERO SECTION -------------------------------- */
 /** NOTE: Black background only (no video). */
 function Hero() {
   // cursor glow & parallax (kept)
@@ -773,6 +778,16 @@ function Hero() {
 
   const glowX = useTransform(mx, (v) => `${v * 100}%`);
   const glowY = useTransform(my, (v) => `${v * 100}%`);
+
+  // Personalized headline
+  const [firstName, setFirstName] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const n = localStorage.getItem("rr_name");
+      if (n) setFirstName(n.split(" ")[0]);
+    } catch {}
+  }, []);
+  const headline = firstName ? `Welcome to RedRoute, ${firstName}` : "Welcome to RedRoute";
 
   function onMove(e: React.MouseEvent<HTMLDivElement>) {
     const r = e.currentTarget.getBoundingClientRect();
@@ -806,7 +821,7 @@ function Hero() {
             <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
               {/* LEFT: headline + actions */}
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
-                <Kinetic text="Welcome to RedRoute" className="text-4xl md:text-6xl" />
+                <Kinetic text={headline} className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
                   Hotels. Events. Experiences. Your gateway to the time of your life—anywhere, anytime!
                 </p>
@@ -821,17 +836,24 @@ function Hero() {
               </motion.div>
 
               {/* RIGHT: compact search */}
-              <motion.div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur" style={{ transform: pPanel }}>
+              <motion.div
+                className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur"
+                style={{ transform: pPanel }}
+              >
+                {/* Ensure all controls share the same height and align baseline */}
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
                   <Field icon={<MapPin className="size-4" />} label="Destination">
+                    {/* PillInput inside DestinationPicker already h-10 */}
                     <DestinationPicker />
                   </Field>
 
                   <Field icon={<Calendar className="size-4" />} label="Dates">
+                    {/* CalendarPopover should use PillInput so it is also h-10 and same color */}
                     <CalendarPopover />
                   </Field>
 
                   <Field icon={<User className="size-4" />} label="Guests">
+                    {/* GuestsPopover uses a button with h-10 */}
                     <GuestsPopover />
                   </Field>
 
@@ -872,6 +894,7 @@ function Hero() {
     </section>
   );
 }
+
 
 /* ---------------------- Magnetic demo button with sheen -------------------- */
 function MagneticButton() {
