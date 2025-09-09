@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
-
 import {
   motion,
   useMotionValue,
@@ -705,8 +704,6 @@ function CalendarPopover() {
   );
 }
 
-
-
 function Testimonials() {
   const quotes = [
     { name: "Aman Mehra", role: "Product Lead", text: "RedRoute feels like a movie trailer — fast, beautiful, and I’m checked out in seconds.", initials: "AM", rating: 5 },
@@ -767,6 +764,7 @@ function SiteFooter() {
 }
 
 /* ----------------------------- HERO SECTION -------------------------------- */
+/** NOTE: Black background only (no video). */
 /* ----------------------------- HERO SECTION -------------------------------- */
 /** NOTE: Black background only (no video). */
 function Hero() {
@@ -779,15 +777,45 @@ function Hero() {
   const glowX = useTransform(mx, (v) => `${v * 100}%`);
   const glowY = useTransform(my, (v) => `${v * 100}%`);
 
-  // Personalized headline
+  // ---- Personalized headline: try localStorage → API /me → email fallback
   const [firstName, setFirstName] = useState<string | null>(null);
+
   useEffect(() => {
-    try {
-      const n = localStorage.getItem("rr_name");
-      if (n) setFirstName(n.split(" ")[0]);
-    } catch {}
+    const fromLS = (localStorage.getItem("rr_name") || "").trim();
+    if (fromLS) {
+      setFirstName(fromLS.split(" ")[0]);
+      return;
+    }
+
+    (async () => {
+      // Try your API if present
+      try {
+        const r = await fetch("/api/auth/me", { credentials: "include" });
+        if (r.ok) {
+          const me = await r.json().catch(() => null);
+          const fn: string | undefined =
+            me?.user?.firstName || me?.firstName || me?.user?.name || me?.name;
+          if (fn && fn.trim()) {
+            localStorage.setItem("rr_name", fn);
+            setFirstName(fn.split(" ")[0]);
+            return;
+          }
+        }
+      } catch {
+        // ignore — we’ll try the email fallback below
+      }
+
+      // Fallback: derive a name from cached email if you store it
+      const email = (localStorage.getItem("rr_email") || "").trim();
+      if (email.includes("@")) {
+        const guess = email.split("@")[0];
+        if (guess) setFirstName(guess);
+      }
+    })();
   }, []);
-  const headline = firstName ? `Welcome to RedRoute, ${firstName}` : "Welcome to RedRoute";
+
+  // Keep the name glued to "RedRoute" on the same line using NBSP
+  const headline = `Welcome to RedRoute${firstName ? `,\u00A0${firstName}` : ""}`;
 
   function onMove(e: React.MouseEvent<HTMLDivElement>) {
     const r = e.currentTarget.getBoundingClientRect();
@@ -823,7 +851,7 @@ function Hero() {
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
                 <Kinetic text={headline} className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
-                  Hotels. Events. Experiences. Your gateway to the time of your life-anywhere, anytime!
+                  Hotels. Events. Experiences. Your gateway to the time of your life—anywhere, anytime!
                 </p>
                 <div className="flex flex-wrap items-center gap-2 md:gap-3">
                   <MagneticButton />
@@ -836,28 +864,17 @@ function Hero() {
               </motion.div>
 
               {/* RIGHT: compact search */}
-              <motion.div
-                className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur"
-                style={{ transform: pPanel }}
-              >
-                {/* Ensure all controls share the same height and align baseline */}
+              <motion.div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur" style={{ transform: pPanel }}>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
                   <Field icon={<MapPin className="size-4" />} label="Destination">
-                    {/* PillInput inside DestinationPicker already h-10 */}
                     <DestinationPicker />
                   </Field>
-
                   <Field icon={<Calendar className="size-4" />} label="Dates">
-                    {/* CalendarPopover should use PillInput so it is also h-10 and same color */}
                     <CalendarPopover />
                   </Field>
-
                   <Field icon={<User className="size-4" />} label="Guests">
-                    {/* GuestsPopover uses a button with h-10 */}
                     <GuestsPopover />
                   </Field>
-
-                  {/* Search aligned like other fields */}
                   <Field label={<span className="sr-only">Search</span>}>
                     <Button className="h-10 w-full text-sm rounded-xl relative overflow-hidden">
                       <span className="relative z-10">Search</span>
@@ -894,7 +911,6 @@ function Hero() {
     </section>
   );
 }
-
 
 /* ---------------------- Magnetic demo button with sheen -------------------- */
 function MagneticButton() {
@@ -1122,12 +1138,8 @@ function EventStrip() {
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
 
-  // Ensure login-only videos stop & free resources after navigating here.
+  // Stop any videos from earlier pages
   useEffect(() => {
-    // If your login video has a data attribute, prefer this:
-    // document.querySelectorAll<HTMLVideoElement>('video[data-login-video]').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
-
-    // Generic fallback: pause/unload all videos not inside this page's hero (we don't use a video here anyway).
     document.querySelectorAll<HTMLVideoElement>("video").forEach((v) => {
       v.pause();
       v.removeAttribute("src");
@@ -1135,16 +1147,35 @@ export default function RedRouteLandingUltra() {
     });
   }, []);
 
-
+  // First name chip (from localStorage)
+  const [firstName, setFirstName] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const n = localStorage.getItem("rr_name");
+      if (n) setFirstName(n.split(" ")[0]);
+    } catch {}
+  }, []);
 
   const logout = () => {
-    localStorage.removeItem("rr_demo_user");
+    try {
+      localStorage.removeItem("rr_demo_user");
+      localStorage.removeItem("rr_guest");
+      // keep rr_name so greeting can be used after returning? Clear if you want:
+      // localStorage.removeItem("rr_name");
+    } catch {}
     navigate("/");
   };
 
   return (
     <div className="min-h-screen w-full bg-black font-sans">
       <ScrollProgress />
+
+      {/* Greeting chip next to Logout */}
+      {firstName && (
+        <div className="fixed top-5 right-28 z-50 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-white">
+          Welcome, {firstName}
+        </div>
+      )}
 
       <button
         onClick={logout}
