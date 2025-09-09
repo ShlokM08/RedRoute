@@ -5,15 +5,33 @@ import {
   Route,
   Navigate,
   Outlet,
+  useLocation,
 } from "react-router-dom";
 import SignIn from "./SignIn";
 import RedRouteLandingUltra from "./RedRouteLandingUltra";
 import SquareImage from "./components/SquareImage";
 
-/** single source of truth for auth */
+/** read localStorage safely */
+function getLS(key: string) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+/** treat either rr_demo_user or rr_guest as a session */
 function isAuthed() {
-  // treat either auth or guest as a "session"
-  return !!(localStorage.getItem("rr_demo_user") || localStorage.getItem("rr_guest"));
+  return !!(getLS("rr_demo_user") || getLS("rr_guest"));
+}
+
+/** /logout route clears session and returns to "/" */
+function Logout() {
+  useEffect(() => {
+    try {
+      localStorage.removeItem("rr_demo_user");
+      localStorage.removeItem("rr_guest");
+      localStorage.removeItem("rr_name");
+    } catch {}
+    // hard replace so history doesn’t go back to protected routes
+    window.location.replace("/");
+  }, []);
+  return null;
 }
 
 /** Only for routes that require a session */
@@ -21,16 +39,22 @@ function RequireAuth() {
   return isAuthed() ? <Outlet /> : <Navigate to="/" replace />;
 }
 
-/** Redirect signed-in users away from SignIn */
+/** Redirect signed-in users away from SignIn
+ *  If ?forceLogin=1 is present, always show SignIn (handy in prod).
+ */
 function RedirectIfAuthed() {
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  const forceLogin = params.get("forceLogin") === "1";
+  if (forceLogin) return <Outlet />;
   return isAuthed() ? <Navigate to="/home" replace /> : <Outlet />;
 }
 
 export default function App() {
-  // Dev-only: clear stale sessions during local dev
+  // Optional dev helper: clear sessions when running locally
   useEffect(() => {
     if (import.meta.env.DEV) {
-      // comment these out if you don’t want auto-clear locally
+      // comment these out if you don't want auto-clear in dev
       // localStorage.removeItem("rr_demo_user");
       // localStorage.removeItem("rr_guest");
     }
@@ -39,7 +63,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public gate: if authed, go to /home; else show SignIn */}
+        {/* Public: show SignIn unless already authed (unless ?forceLogin=1) */}
         <Route element={<RedirectIfAuthed />}>
           <Route index element={<SignIn />} />
           <Route path="/" element={<SignIn />} />
@@ -67,6 +91,9 @@ export default function App() {
             }
           />
         </Route>
+
+        {/* Explicit logout route */}
+        <Route path="/logout" element={<Logout />} />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />

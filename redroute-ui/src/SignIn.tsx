@@ -26,6 +26,12 @@ export default function SignIn() {
       <VideoBackground src="/s.mp4" />
       <div className="relative z-10 w-full max-w-md">
         <GamingLogin />
+        {/* Tiny helper link for prod debugging */}
+        <div className="mt-3 text-center text-xs text-white/60">
+          Having trouble?{" "}
+          <a className="underline" href="/logout">Force sign out</a> or{" "}
+          <a className="underline" href="/?forceLogin=1">open login directly</a>.
+        </div>
       </div>
       <footer className="absolute bottom-4 left-0 right-0 text-center text-white/70 text-sm z-10">
         © {new Date().getFullYear()} RedRoute
