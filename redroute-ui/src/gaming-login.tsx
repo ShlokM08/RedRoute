@@ -1,8 +1,12 @@
 // src/gaming-login.tsx
 'use client';
 import React, { useState } from 'react';
-import { Eye, EyeOff, Mail, Lock, User as UserIcon, Calendar as CalendarIcon } from 'lucide-react';
+import {
+  Eye, EyeOff, Mail, Lock,
+  User as UserIcon, Calendar as CalendarIcon
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { setSession } from "./session";
 
 const LANDING_ROUTE = '/home';
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''; // leave blank for same-origin
@@ -86,16 +90,15 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
   };
 
   async function call(path: string, body: any) {
-    // If no API, this will 404/405 on Vercel; we’ll handle that gracefully.
+    // If no API, this may 404/405 on Vercel; we’ll handle that gracefully.
     const r = await fetch(`${API_BASE}/api/auth/${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(body),
     }).catch(() => {
-      // Network error (e.g., no server) — bubble up with a pseudo-status
       const err: any = new Error('Network error');
-      err.status = -1;
+      err.status = -1; // sentinel for fetch failure
       throw err;
     });
 
@@ -113,9 +116,10 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
 
   function demoFallbackAndGo() {
     // Seamless “demo mode” when API isn’t present on Vercel
-    localStorage.removeItem('rr_guest');
-    localStorage.setItem('rr_demo_user', 'auth');
-    if (firstName) localStorage.setItem('rr_name', firstName);
+    setSession("auth");
+    if (firstName) {
+      try { localStorage.setItem('rr_name', firstName); } catch {}
+    }
     navigate(LANDING_ROUTE, { replace: true });
   }
 
@@ -143,17 +147,17 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
 
       onSubmit?.(email, mode); // optional analytics
 
-      // Mark session + try to cache name
-      localStorage.removeItem('rr_guest');
-      localStorage.setItem('rr_demo_user', 'auth');
+      // Mark session + try to cache name (if API populated it)
+      setSession("auth");
       try {
         const me = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' }).then(r => r.json());
         if (me?.user?.firstName) localStorage.setItem('rr_name', me.user.firstName);
       } catch {}
+
       navigate(LANDING_ROUTE, { replace: true });
     } catch (err: any) {
       // If API isn’t deployed or doesn’t accept POST (405/404/501), use demo fallback.
-      if ([404, 405, 501, 500, -1].includes(err?.status)) {
+      if ([404, 405, 500, 501, -1].includes(err?.status)) {
         demoFallbackAndGo();
         return;
       }
@@ -168,7 +172,7 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
       <div className="mb-8 text-center">
         <h2 className="text-3xl font-bold mb-2 relative group">
           <span className="absolute -inset-1 bg-gradient-to-r from-purple-600/30 via-pink-500/30 to-blue-500/30 blur-xl opacity-75 group-hover:opacity-100 transition-all duration-500" />
-        <span className="relative inline-block text-3xl font-bold mb-2 text-white">RedRoute</span>
+          <span className="relative inline-block text-3xl font-bold mb-2 text-white">RedRoute</span>
         </h2>
         <p className="text-white/80 mt-2">
           {mode === 'login' ? 'Welcome back' : 'Create your account'}
@@ -308,8 +312,7 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
         <button
           type="button"
           onClick={() => {
-            localStorage.setItem('rr_guest', '1');
-            localStorage.setItem('rr_demo_user', 'guest');
+            setSession("guest");
             navigate(LANDING_ROUTE, { replace: true });
           }}
           className="w-full py-3 rounded-lg text-white font-medium transition-all bg-white/10 hover:bg-white/15 border border-white/15"
