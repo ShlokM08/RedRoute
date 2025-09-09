@@ -26,7 +26,7 @@
     "// lint": "eslint (optional)",
     "lint": "eslint .",
     "...": "...",
-  "db:clearUsers": "tsx scripts/clear-users.ts"
+    "db:clearUsers": "tsx scripts/clear-users.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.15.0",
@@ -37,6 +37,7 @@
     "class-variance-authority": "^0.7.1",
     "cookie": "^1.0.2",
     "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
     "express": "^5.1.0",
     "framer-motion": "^12.23.12",
     "jsonwebtoken": "^9.0.2",
@@ -52,6 +53,7 @@
     "@tailwindcss/postcss": "^4.1.12",
     "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.9",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/react": "^19.1.10",

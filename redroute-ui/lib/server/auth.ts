@@ -26,14 +26,18 @@ export function verifySession(token: string): TokenPayload | null {
 }
 
 /** Build a Set-Cookie header value for the session cookie. */
-export function makeSessionCookie(token: string, remember = false) {
-  return serialize(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
-    path: "/",
-    maxAge: remember ? THIRTY_DAYS : ONE_DAY,
-  });
+export function makeSessionCookie(token: string, remember: boolean) {
+  const prod = process.env.NODE_ENV === "production";
+  const maxAge = remember ? 60 * 60 * 24 * 30 : 60 * 60 * 8; // 30d or 8h
+
+  return [
+    `${process.env.SESSION_COOKIE ?? "rr_session"}=${token}`,
+    `Path=/`,
+    `HttpOnly`,
+    `SameSite=None`,         // <-- important for cross-site cookies
+    prod ? `Secure` : "",    // <-- required by SameSite=None
+    `Max-Age=${maxAge}`
+  ].filter(Boolean).join("; ");
 }
 
 /** Build a Set-Cookie header value that clears the cookie. */
