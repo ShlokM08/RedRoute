@@ -1,4 +1,3 @@
-// src/App.tsx
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import SignIn from "./SignIn";
@@ -6,9 +5,12 @@ import RedRouteLandingUltra from "./RedRouteLandingUltra";
 import SquareImage from "./components/SquareImage";
 
 export default function App() {
-  // On first mount, clear any stale session (keeps dev flow predictable)
+  // Dev helper only: clear stale session during local dev
   useEffect(() => {
-    localStorage.removeItem("rr_demo_user");
+    if (import.meta.env.DEV) {
+      localStorage.removeItem("rr_demo_user");
+      localStorage.removeItem("rr_guest");
+    }
   }, []);
 
   return (
@@ -16,11 +18,7 @@ export default function App() {
       <Routes>
         <Route index element={<SignIn />} />
         <Route path="/" element={<SignIn />} />
-
-        {/* Main site after you log in from Sign-In */}
         <Route path="/home" element={<RedRouteLandingUltra />} />
-
-        {/* Square image demo route */}
         <Route
           path="/square"
           element={
@@ -37,8 +35,6 @@ export default function App() {
             </div>
           }
         />
-
-        {/* Anything else → send to Sign-In */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
