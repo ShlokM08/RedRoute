@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 /** Route where RedRouteLandingUltra is mounted */
@@ -78,11 +78,19 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<Mode>('login');
+
+  // shared
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [password2, setPassword2] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
+
+  // register-only
+  const [password2, setPassword2] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName]   = useState('');
+  const [dob, setDob]             = useState(''); // yyyy-mm-dd
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -95,7 +103,15 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
     if (!email || !password) return 'Please fill out all fields.';
     if (!/\S+@\S+\.\S+/.test(email)) return 'Enter a valid email.';
     if (password.length < 6) return 'Password should be at least 6 characters.';
-    if (mode === 'register' && password !== password2) return 'Passwords do not match.';
+    if (mode === 'register') {
+      if (!firstName.trim() || !lastName.trim()) return 'Please enter your first and last name.';
+      if (password !== password2) return 'Passwords do not match.';
+      if (dob) {
+        // very light sanity check
+        const d = new Date(dob);
+        if (Number.isNaN(+d) || d.getFullYear() < 1900) return 'Enter a valid date of birth.';
+      }
+    }
     return null;
   };
 
@@ -119,7 +135,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
     setSubmitting(true);
     try {
       if (mode === 'register') {
-        await call('register', { email, password, remember });
+        await call('register', {
+          email,
+          password,
+          remember,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          dob: dob || null,
+        });
       } else {
         await call('login', { email, password, remember });
       }
@@ -143,7 +166,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
   }
 
   return (
-    <div className="p-8 rounded-2xl backdrop-blur-sm bg-black/50 border border-white/10 w-[min(440px,92vw)]">
+    <div className="p-8 rounded-2xl backdrop-blur-sm bg-black/50 border border-white/10 w-[min(480px,92vw)]">
       <div className="mb-8 text-center">
         <h2 className="text-3xl font-bold mb-2 relative group">
           <span className="absolute -inset-1 bg-gradient-to-r from-purple-600/30 via-pink-500/30 to-blue-500/30 blur-xl opacity-75 group-hover:opacity-100 transition-all duration-500" />
@@ -153,6 +176,30 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+        {/* Register-only names row */}
+        {mode === 'register' && (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <FormInput
+              icon={<User className="text-white/60" size={18} />}
+              type="text"
+              placeholder="First name"
+              value={firstName}
+              onChange={(e) => { resetErr(); setFirstName(e.target.value); }}
+              required
+              autoComplete="given-name"
+            />
+            <FormInput
+              icon={<User className="text-white/60" size={18} />}
+              type="text"
+              placeholder="Last name"
+              value={lastName}
+              onChange={(e) => { resetErr(); setLastName(e.target.value); }}
+              required
+              autoComplete="family-name"
+            />
+          </div>
+        )}
+
         <FormInput
           icon={<Mail className="text-white/60" size={18} />}
           type="email"
@@ -162,6 +209,22 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
           required
           autoComplete="email"
         />
+
+        {/* Register-only DOB */}
+        {mode === 'register' && (
+          <div className="relative">
+            <FormInput
+              icon={<Calendar className="text-white/60" size={18} />}
+              type="date"
+              placeholder="Date of birth"
+              value={dob}
+              onChange={(e) => { resetErr(); setDob(e.target.value); }}
+              autoComplete="bday"
+            />
+            {/* helper text (optional) */}
+            <div className="mt-1 text-[11px] text-white/60">DOB (optional)</div>
+          </div>
+        )}
 
         <div className="relative">
           <FormInput

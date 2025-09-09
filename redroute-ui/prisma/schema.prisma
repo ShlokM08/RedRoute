@@ -7,19 +7,25 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/* ======================= NEW: User (for auth) ======================= */
+/**
+ * ======================= User (for auth) =======================
+ */
 model User {
-  id           String   @id @default(cuid())  // works with JWT 'sub'
-  email        String   @unique
+  id           String     @id @default(cuid())
+  email        String     @unique
   passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
+  firstName    String?
+  lastName     String?
+  dob          DateTime?
   bookings     Booking[]
   favorites    Favorite[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
-/* ====================== Your existing models ======================== */
+/**
+ * ====================== Hotel Details ========================
+ */
 
 model Hotel {
   id          Int          @id @default(autoincrement())
@@ -48,7 +54,7 @@ model HotelImage {
 model Booking {
   id        Int       @id @default(autoincrement())
   hotelId   Int
-  userId    String?   // now FK -> User.id (nullable is fine)
+  userId    String? // now FK -> User.id (nullable is fine)
   startDate DateTime?
   endDate   DateTime?
   guests    Int       @default(2)

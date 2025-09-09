@@ -764,7 +764,7 @@ function SiteFooter() {
 
 /* ----------------------------- HERO SECTION -------------------------------- */
 /** NOTE: Black background only (no video). */
-function Hero() {
+function Hero({ firstName }: { firstName?: string }) {
   // cursor glow & parallax (kept)
   const mx = useMotionValue(0.5);
   const my = useMotionValue(0.5);
@@ -779,6 +779,8 @@ function Hero() {
     mx.set((e.clientX - r.left) / r.width);
     my.set((e.clientY - r.top) / r.height);
   }
+
+  const greeting = `Welcome to RedRoute${firstName ? `, ${firstName}` :  " "}`;
 
   return (
     <section className="relative text-white z-40 isolate bg-black">
@@ -806,7 +808,7 @@ function Hero() {
             <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
               {/* LEFT: headline + actions */}
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
-                <Kinetic text="Welcome to RedRoute" className="text-4xl md:text-6xl" />
+                <Kinetic text={greeting} className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
                   Hotels. Events. Experiences. Your gateway to the time of your life—anywhere, anytime!
                 </p>
@@ -1096,15 +1098,22 @@ function EventStrip() {
 }
 
 /* ------------------------------- PAGE -------------------------------------- */
+type Me = {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  dob?: string | null;
+};
+
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
 
-  // Ensure login-only videos stop & free resources after navigating here.
-  useEffect(() => {
-    // If your login video has a data attribute, prefer this:
-    // document.querySelectorAll<HTMLVideoElement>('video[data-login-video]').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
+  const [me, setMe] = useState<Me | null>(null);
+  const [checkedAuth, setCheckedAuth] = useState(false);
 
-    // Generic fallback: pause/unload all videos not inside this page's hero (we don't use a video here anyway).
+  // Kill any lingering login page videos to keep perf tidy.
+  useEffect(() => {
     document.querySelectorAll<HTMLVideoElement>("video").forEach((v) => {
       v.pause();
       v.removeAttribute("src");
@@ -1112,16 +1121,37 @@ export default function RedRouteLandingUltra() {
     });
   }, []);
 
+  // Auth gate: allow if guest OR /api/auth/me returns a user; otherwise send to login.
   useEffect(() => {
-    if (!localStorage.getItem("rr_demo_user")) {
-      navigate("/");
+    const isGuest = localStorage.getItem("rr_guest") === "1";
+    if (isGuest) {
+      setCheckedAuth(true);
+      return;
     }
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.user) setMe(j.user as Me);
+        else navigate("/", { replace: true });
+      })
+      .catch(() => navigate("/", { replace: true }))
+      .finally(() => setCheckedAuth(true));
   }, [navigate]);
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    } catch {}
     localStorage.removeItem("rr_demo_user");
+    localStorage.removeItem("rr_guest");
     navigate("/");
   };
+
+  const greetingName =
+    me?.firstName?.trim() ||
+    (localStorage.getItem("rr_guest") === "1" ? "Guest" : "");
+
+  if (!checkedAuth) return null;
 
   return (
     <div className="min-h-screen w-full bg-black font-sans">
@@ -1135,7 +1165,7 @@ export default function RedRouteLandingUltra() {
         <LogOut className="size-4" /> Logout
       </button>
 
-      <Hero />
+      <Hero firstName={greetingName} />
       <StatsStrip />
       <Featured />
       <KenBurnsShowcase />

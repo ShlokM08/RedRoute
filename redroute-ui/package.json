@@ -24,7 +24,9 @@
     "db:push": "prisma db push",
     "seed": "node --env-file=.env prisma/seed.mjs",
     "// lint": "eslint (optional)",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "...": "...",
+  "db:clearUsers": "tsx scripts/clear-users.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.15.0",
