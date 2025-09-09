@@ -128,36 +128,41 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    resetErr();
-    const v = validate();
-    if (v) { setError(v); return; }
-    setSubmitting(true);
-    try {
-      if (mode === 'register') {
-        await call('register', {
-          email,
-          password,
-          remember,
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          dob: dob || null,
-        });
-      } else {
-        await call('login', { email, password, remember });
-      }
-      onSubmit?.(email, password, remember, mode);
+  e.preventDefault();
+  setError(null);
 
-      // mark access for your existing checks and go to landing
-      localStorage.removeItem('rr_guest');
-      localStorage.setItem('rr_demo_user', 'auth');
-      navigate(LANDING_ROUTE, { replace: true });
-    } catch (err: any) {
-      setError(err?.message || 'Something went wrong.');
-    } finally {
-      setSubmitting(false);
+  // (keep your own validation here)
+
+  setSubmitting(true);
+  try {
+    if (mode === "register") {
+      await call("register", { email, password, remember, firstName, lastName, dob });
+    } else {
+      await call("login", { email, password, remember });
     }
+
+    // Double-check cookie is set by calling /me
+    const me = await fetch(`${API_BASE}/api/auth/me`, { credentials: "include" })
+      .then(r => r.json())
+      .catch(() => ({ user: null }));
+
+    // mark access for landing guard
+    if (me?.user) {
+      localStorage.setItem("rr_demo_user", "auth");
+      if (me.user.firstName) localStorage.setItem("rr_name", me.user.firstName);
+    } else {
+      // if cookie didn’t stick, still allow guest to avoid bounce loop
+      localStorage.setItem("rr_demo_user", "guest");
+    }
+
+    navigate("/app", { replace: true });
+  } catch (err: any) {
+    setError(err?.message || "Something went wrong.");
+  } finally {
+    setSubmitting(false);
   }
+}
+
 
   function proceedAsGuest() {
     localStorage.setItem('rr_guest', '1');

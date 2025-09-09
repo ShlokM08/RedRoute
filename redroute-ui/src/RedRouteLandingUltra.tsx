@@ -1123,20 +1123,45 @@ export default function RedRouteLandingUltra() {
 
   // Auth gate: allow if guest OR /api/auth/me returns a user; otherwise send to login.
   useEffect(() => {
-    const isGuest = localStorage.getItem("rr_guest") === "1";
-    if (isGuest) {
-      setCheckedAuth(true);
+  let cancelled = false;
+
+  (async () => {
+    // allow guest through immediately
+    const guest =
+      localStorage.getItem("rr_guest") === "1" ||
+      localStorage.getItem("rr_demo_user") === "guest";
+    if (guest) {
+      if (!cancelled) setCheckedAuth(true);
       return;
     }
-    fetch("/api/auth/me", { credentials: "include" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j?.user) setMe(j.user as Me);
-        else navigate("/", { replace: true });
-      })
-      .catch(() => navigate("/", { replace: true }))
-      .finally(() => setCheckedAuth(true));
-  }, [navigate]);
+
+    // works for dev (empty = Vite proxy) and prod (Vercel env)
+    const API = import.meta.env.VITE_API_BASE ?? "";
+
+    try {
+      const res = await fetch(`${API}/api/auth/me`, { credentials: "include" });
+      const { user } = await res.json().catch(() => ({ user: null }));
+
+      if (cancelled) return;
+
+      if (user) {
+        setMe(user as Me);
+        if (user.firstName) localStorage.setItem("rr_name", user.firstName);
+      } else {
+        navigate("/", { replace: true });
+      }
+    } catch {
+      if (!cancelled) navigate("/", { replace: true });
+    } finally {
+      if (!cancelled) setCheckedAuth(true);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [navigate]);
+
 
   const logout = async () => {
     try {

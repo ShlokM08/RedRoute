@@ -8,9 +8,9 @@
   },
   "scripts": {
     "// dev": "Run Vite client and API together",
-    "dev": "concurrently -k -n APP,API -c blue,magenta \"vite\" \"tsx server/index.ts\"",
+    "dev": "concurrently -n APP,API -c blue,magenta \"vite\" \"tsx watch server/index.ts\"",
     "dev:app": "vite",
-    "dev:api": "tsx server/index.ts",
+    "dev:api": "tsx watch server/index.ts",
     "// build": "Type-check both tsconfigs, then build client",
     "build": "tsc -b && vite build",
     "// preview": "Serve the built client",

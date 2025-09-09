@@ -18,24 +18,31 @@ import {
  */
 const app = express();
 
-// Accept cookies from the frontend (Vercel) and local dev
+const normalize = (o?: string | null) => (o ? o.replace(/\/$/, "") : o);
+
+// Allow any localhost:* and your Vercel domain (no trailing slash)
 const DEV_ORIGIN = process.env.DEV_ORIGIN ?? "http://localhost:5173";
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN; // e.g., https://your-app.vercel.app
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? "https://red-route-voau.vercel.app";
 const ALLOWED_ORIGINS = [DEV_ORIGIN, FRONTEND_ORIGIN].filter(Boolean) as string[];
+
+const allowedSet = new Set([normalize(DEV_ORIGIN), normalize(FRONTEND_ORIGIN)].filter(Boolean) as string[]);
 
 app.use(
   cors({
     origin: (origin, cb) => {
-      // Allow same-origin / curl / server-side requests (no Origin header)
+      // Same-origin / curl / proxy: no Origin header → allow
       if (!origin) return cb(null, true);
-      if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+
+      const o = normalize(origin)!;
+      if (o.startsWith("http://localhost")) return cb(null, true); // any localhost:* port
+      if (allowedSet.has(o)) return cb(null, true);
+
       return cb(new Error(`CORS blocked: ${origin}`));
     },
-    credentials: true, // required for cookies
+    credentials: true,
   })
 );
 
-// Needed if your app is behind a proxy (Render/Heroku/etc.) so "Secure" cookies work
 app.set("trust proxy", 1);
 
 app.use(express.json({ limit: "1mb" }));
@@ -168,6 +175,8 @@ app.get("/api/auth/me", async (req, res) => {
     return res.status(500).json({ error: "Server error" });
   }
 });
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
 
 /**
  * ──────────────────────────────────────────────────────────────────────────────
@@ -179,3 +188,4 @@ app.listen(PORT, () => {
   console.log(`API listening on http://localhost:${PORT}`);
   console.log(`Allowed origins: ${ALLOWED_ORIGINS.join(", ") || "(none)"}`);
 });
+export default app;
