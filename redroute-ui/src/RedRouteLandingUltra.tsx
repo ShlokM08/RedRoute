@@ -764,7 +764,7 @@ function SiteFooter() {
 
 /* ----------------------------- HERO SECTION -------------------------------- */
 /** NOTE: Black background only (no video). */
-function Hero({ firstName }: { firstName?: string }) {
+function Hero() {
   // cursor glow & parallax (kept)
   const mx = useMotionValue(0.5);
   const my = useMotionValue(0.5);
@@ -779,8 +779,6 @@ function Hero({ firstName }: { firstName?: string }) {
     mx.set((e.clientX - r.left) / r.width);
     my.set((e.clientY - r.top) / r.height);
   }
-
-  const greeting = `Welcome to RedRoute${firstName ? `, ${firstName}` :  " "}`;
 
   return (
     <section className="relative text-white z-40 isolate bg-black">
@@ -808,7 +806,7 @@ function Hero({ firstName }: { firstName?: string }) {
             <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
               {/* LEFT: headline + actions */}
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
-                <Kinetic text={greeting} className="text-4xl md:text-6xl" />
+                <Kinetic text="Welcome to RedRoute" className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
                   Hotels. Events. Experiences. Your gateway to the time of your life—anywhere, anytime!
                 </p>
@@ -1098,22 +1096,15 @@ function EventStrip() {
 }
 
 /* ------------------------------- PAGE -------------------------------------- */
-type Me = {
-  id: string;
-  email: string;
-  firstName?: string | null;
-  lastName?: string | null;
-  dob?: string | null;
-};
-
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
 
-  const [me, setMe] = useState<Me | null>(null);
-  const [checkedAuth, setCheckedAuth] = useState(false);
-
-  // Kill any lingering login page videos to keep perf tidy.
+  // Ensure login-only videos stop & free resources after navigating here.
   useEffect(() => {
+    // If your login video has a data attribute, prefer this:
+    // document.querySelectorAll<HTMLVideoElement>('video[data-login-video]').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
+
+    // Generic fallback: pause/unload all videos not inside this page's hero (we don't use a video here anyway).
     document.querySelectorAll<HTMLVideoElement>("video").forEach((v) => {
       v.pause();
       v.removeAttribute("src");
@@ -1121,62 +1112,16 @@ export default function RedRouteLandingUltra() {
     });
   }, []);
 
-  // Auth gate: allow if guest OR /api/auth/me returns a user; otherwise send to login.
   useEffect(() => {
-  let cancelled = false;
-
-  (async () => {
-    // allow guest through immediately
-    const guest =
-      localStorage.getItem("rr_guest") === "1" ||
-      localStorage.getItem("rr_demo_user") === "guest";
-    if (guest) {
-      if (!cancelled) setCheckedAuth(true);
-      return;
+    if (!localStorage.getItem("rr_demo_user")) {
+      navigate("/");
     }
+  }, [navigate]);
 
-    // works for dev (empty = Vite proxy) and prod (Vercel env)
-    const API = import.meta.env.VITE_API_BASE ?? "";
-
-    try {
-      const res = await fetch(`${API}/api/auth/me`, { credentials: "include" });
-      const { user } = await res.json().catch(() => ({ user: null }));
-
-      if (cancelled) return;
-
-      if (user) {
-        setMe(user as Me);
-        if (user.firstName) localStorage.setItem("rr_name", user.firstName);
-      } else {
-        navigate("/", { replace: true });
-      }
-    } catch {
-      if (!cancelled) navigate("/", { replace: true });
-    } finally {
-      if (!cancelled) setCheckedAuth(true);
-    }
-  })();
-
-  return () => {
-    cancelled = true;
-  };
-}, [navigate]);
-
-
-  const logout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    } catch {}
+  const logout = () => {
     localStorage.removeItem("rr_demo_user");
-    localStorage.removeItem("rr_guest");
     navigate("/");
   };
-
-  const greetingName =
-    me?.firstName?.trim() ||
-    (localStorage.getItem("rr_guest") === "1" ? "Guest" : "");
-
-  if (!checkedAuth) return null;
 
   return (
     <div className="min-h-screen w-full bg-black font-sans">
@@ -1190,7 +1135,7 @@ export default function RedRouteLandingUltra() {
         <LogOut className="size-4" /> Logout
       </button>
 
-      <Hero firstName={greetingName} />
+      <Hero />
       <StatsStrip />
       <Featured />
       <KenBurnsShowcase />

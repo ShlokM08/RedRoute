@@ -1,27 +1,25 @@
-import  { useEffect, useRef } from "react";
+// src/SignIn.tsx
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import GamingLogin from "./gaming-login";
 
-const LANDING_ROUTE = "/app"; // make sure this matches your router
-
-function VideoBackground({ videoUrl }: { videoUrl: string }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    videoRef.current?.play().catch(() => {});
-  }, []);
+/** Fullscreen looping background video */
+function VideoBackground({ src = "/s.mp4", poster }: { src?: string; poster?: string }) {
   return (
-    <div className="absolute inset-0 w-full h-full overflow-hidden">
-      <div className="absolute inset-0 bg-black/30 z-10" />
+    <div className="pointer-events-none absolute inset-0 -z-10">
       <video
-        ref={videoRef}
-        className="absolute inset-0 min-w-full min-h-full object-cover w-auto h-auto"
+        data-login-video
+        className="h-full w-full object-cover"
+        src={src}
+        poster={poster}
         autoPlay
-        loop
         muted
+        loop
         playsInline
-      >
-        <source src={videoUrl} type="video/mp4" />
-      </video>
+        preload="auto"
+      />
+      {/* subtle dark overlay so the form pops */}
+      <div className="absolute inset-0 bg-black/40" />
     </div>
   );
 }
@@ -29,23 +27,20 @@ function VideoBackground({ videoUrl }: { videoUrl: string }) {
 export default function SignIn() {
   const navigate = useNavigate();
 
-  // If already logged in/guest, send to landing
   useEffect(() => {
-    const saved = localStorage.getItem("rr_demo_user");
-    if (saved) navigate(LANDING_ROUTE, { replace: true });
+    const hasSession =
+      localStorage.getItem("rr_demo_user") || localStorage.getItem("rr_guest");
+    if (hasSession) navigate("/home", { replace: true });
   }, [navigate]);
 
   return (
-    <div className="relative min-h-screen w-full flex items-center justify-center px-4 py-12 bg-black">
-      <VideoBackground videoUrl="/s.mp4" />
-
-      <div className="relative z-20 w-full max-w-md">
-        {/* onSubmit is optional; GamingLogin navigates to LANDING_ROUTE on success */}
-        <GamingLogin onSubmit={() => { /* analytics hook (optional) */ }} />
+    <div className="relative min-h-screen w-full flex items-center justify-center px-4 py-12">
+      <VideoBackground src="/s.mp4" />
+      <div className="relative z-10 w-full max-w-md">
+        <GamingLogin />
       </div>
-
-      <footer className="absolute bottom-4 left-0 right-0 text-center text-white/60 text-sm z-20">
-        © 2025 by RedRoute
+      <footer className="absolute bottom-4 left-0 right-0 text-center text-white/70 text-sm z-10">
+        © {new Date().getFullYear()} RedRoute
       </footer>
     </div>
   );

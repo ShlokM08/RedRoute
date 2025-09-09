@@ -1,9 +1,10 @@
+// src/gaming-login.tsx
 'use client';
 import React, { useState } from 'react';
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User as UserIcon, Calendar as CalendarIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const LANDING_ROUTE = '/app';
+const LANDING_ROUTE = '/home'; // where we go after auth
 const API_BASE = import.meta.env.VITE_API_BASE ?? '';
 
 /* ----------------------------- UI helpers --------------------------------- */
@@ -54,20 +55,34 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<Mode>('login');
+
+  // shared
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [password2, setPassword2] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
+
+  // register-only fields
+  const [password2, setPassword2] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [dob, setDob] = useState(''); // yyyy-mm-dd
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /** We actually USE validate to satisfy TS and keep UX tight */
   const validate = (): string | null => {
     if (!email || !password) return 'Please fill all fields.';
     if (!/\S+@\S+\.\S+/.test(email)) return 'Enter a valid email.';
     if (password.length < 6) return 'Password must be at least 6 characters.';
-    if (mode === 'register' && password !== password2) return 'Passwords do not match.';
+
+    if (mode === 'register') {
+      if (!firstName.trim() || !lastName.trim()) return 'Name is required.';
+      if (!dob) return 'Date of birth is required.';
+      if (password !== password2) return 'Passwords do not match.';
+      const d = new Date(dob);
+      if (Number.isNaN(d.getTime())) return 'Enter a valid date of birth.';
+    }
     return null;
   };
 
@@ -87,26 +102,31 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
     e.preventDefault();
     setError(null);
 
-    // USE validate (fixes TS6133 and helps UX)
     const v = validate();
     if (v) { setError(v); return; }
 
     setSubmitting(true);
     try {
       if (mode === 'register') {
-        await call('register', { email, password, remember });
+        await call('register', {
+          email,
+          password,
+          remember,
+          firstName,
+          lastName,
+          dob: new Date(dob).toISOString(), // Prisma DateTime
+        });
       } else {
         await call('login', { email, password, remember });
       }
 
-      // USE onSubmit callback so it's not unused (fixes TS6133)
-      onSubmit?.(email, mode);
+      onSubmit?.(email, mode); // optional external hook
 
-      // mark access + go
+      // mark session + go home
       localStorage.removeItem('rr_guest');
       localStorage.setItem('rr_demo_user', 'auth');
 
-      // optional: fetch /me to cache name
+      // optional: cache first name if backend returns it
       try {
         const me = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' }).then(r => r.json());
         if (me?.user?.firstName) localStorage.setItem('rr_name', me.user.firstName);
@@ -121,16 +141,19 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
   }
 
   return (
-    <div className="p-8 rounded-2xl backdrop-blur-sm bg-black/50 border border-white/10 w-[min(440px,92vw)]">
+    <div className="p-8 rounded-2xl backdrop-blur-sm bg-black/50 border border-white/10 w-[min(460px,92vw)]">
       <div className="mb-8 text-center">
         <h2 className="text-3xl font-bold mb-2 relative group">
           <span className="absolute -inset-1 bg-gradient-to-r from-purple-600/30 via-pink-500/30 to-blue-500/30 blur-xl opacity-75 group-hover:opacity-100 transition-all duration-500" />
           <span className="relative inline-block text-3xl font-bold mb-2 text-white">RedRoute</span>
         </h2>
-        <p className="text-white/80 mt-2">{mode === 'login' ? 'Welcome back' : 'Create your account'}</p>
+        <p className="text-white/80 mt-2">
+          {mode === 'login' ? 'Welcome back' : 'Create your account'}
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+        {/* Email */}
         <FormInput
           icon={<Mail className="text-white/60" size={18} />}
           type="email"
@@ -141,6 +164,7 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
           autoComplete="email"
         />
 
+        {/* Password */}
         <div className="relative">
           <FormInput
             icon={<Lock className="text-white/60" size={18} />}
@@ -161,18 +185,56 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
           </button>
         </div>
 
+        {/* Register-only fields */}
         {mode === 'register' && (
-          <FormInput
-            icon={<Lock className="text-white/60" size={18} />}
-            type="password"
-            placeholder="Confirm password"
-            value={password2}
-            onChange={(e) => setPassword2(e.target.value)}
-            required
-            autoComplete="new-password"
-          />
+          <>
+            {/* Confirm password */}
+            <FormInput
+              icon={<Lock className="text-white/60" size={18} />}
+              type="password"
+              placeholder="Confirm password"
+              value={password2}
+              onChange={(e) => setPassword2(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
+
+            {/* First name */}
+            <FormInput
+              icon={<UserIcon className="text-white/60" size={18} />}
+              type="text"
+              placeholder="First name"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              required
+              autoComplete="given-name"
+            />
+
+            {/* Last name */}
+            <FormInput
+              icon={<UserIcon className="text-white/60" size={18} />}
+              type="text"
+              placeholder="Last name"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              required
+              autoComplete="family-name"
+            />
+
+            {/* Date of birth */}
+            <FormInput
+              icon={<CalendarIcon className="text-white/60" size={18} />}
+              type="date"
+              placeholder="Date of birth"
+              value={dob}
+              onChange={(e) => setDob(e.target.value)}
+              required
+              autoComplete="bday"
+            />
+          </>
         )}
 
+        {/* Remember + mode toggle */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <div onClick={() => setRemember(r => !r)} className="cursor-pointer">
@@ -188,11 +250,19 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
           </div>
 
           {mode === 'login' ? (
-            <button type="button" className="text-sm text-white/80 hover:text-white" onClick={() => setMode('register')}>
+            <button
+              type="button"
+              className="text-sm text-white/80 hover:text-white"
+              onClick={() => setMode('register')}
+            >
               Create account
             </button>
           ) : (
-            <button type="button" className="text-sm text-white/80 hover:text-white" onClick={() => setMode('login')}>
+            <button
+              type="button"
+              className="text-sm text-white/80 hover:text-white"
+              onClick={() => setMode('login')}
+            >
               Have an account? Sign in
             </button>
           )}
@@ -200,17 +270,25 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
 
         {error && <div className="text-sm text-red-400">{error}</div>}
 
+        {/* Submit */}
         <button
           type="submit"
           disabled={submitting}
           className="w-full py-3 rounded-lg text-white font-medium transition-all bg-[#E50914] hover:bg-[#c40b13] focus:outline-none focus:ring-2 focus:ring-[#E50914]/50 disabled:opacity-70 disabled:cursor-not-allowed shadow-[0_10px_30px_rgba(229,9,20,0.35)]"
         >
-          {submitting ? (mode === 'login' ? 'Logging in…' : 'Creating…') : (mode === 'login' ? 'Login' : 'Create Account')}
+          {submitting
+            ? (mode === 'login' ? 'Logging in…' : 'Creating…')
+            : (mode === 'login' ? 'Login' : 'Create Account')}
         </button>
 
+        {/* Guest path */}
         <button
           type="button"
-          onClick={() => { localStorage.setItem('rr_guest', '1'); localStorage.setItem('rr_demo_user', 'guest'); navigate(LANDING_ROUTE, { replace: true }); }}
+          onClick={() => {
+            localStorage.setItem('rr_guest', '1');
+            localStorage.setItem('rr_demo_user', 'guest');
+            navigate(LANDING_ROUTE, { replace: true });
+          }}
           className="w-full py-3 rounded-lg text-white font-medium transition-all bg-white/10 hover:bg-white/15 border border-white/15"
         >
           Proceed as Guest
