@@ -1112,11 +1112,7 @@ export default function RedRouteLandingUltra() {
     });
   }, []);
 
-  useEffect(() => {
-    if (!localStorage.getItem("rr_demo_user")) {
-      navigate("/");
-    }
-  }, [navigate]);
+
 
   const logout = () => {
     localStorage.removeItem("rr_demo_user");

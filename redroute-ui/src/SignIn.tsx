@@ -1,9 +1,6 @@
-// src/SignIn.tsx
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import GamingLogin from "./gaming-login";
 
-/** Fullscreen looping background video */
+/** Fullscreen looping background video for the login page */
 function VideoBackground({ src = "/s.mp4", poster }: { src?: string; poster?: string }) {
   return (
     <div className="pointer-events-none absolute inset-0 -z-10">
@@ -18,21 +15,12 @@ function VideoBackground({ src = "/s.mp4", poster }: { src?: string; poster?: st
         playsInline
         preload="auto"
       />
-      {/* subtle dark overlay so the form pops */}
       <div className="absolute inset-0 bg-black/40" />
     </div>
   );
 }
 
 export default function SignIn() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const hasSession =
-      localStorage.getItem("rr_demo_user") || localStorage.getItem("rr_guest");
-    if (hasSession) navigate("/home", { replace: true });
-  }, [navigate]);
-
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center px-4 py-12">
       <VideoBackground src="/s.mp4" />
