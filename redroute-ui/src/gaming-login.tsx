@@ -92,7 +92,7 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(body),
-    }).catch((e) => {
+    }).catch(() => {
       // Network error (e.g., no server) — bubble up with a pseudo-status
       const err: any = new Error('Network error');
       err.status = -1;
