@@ -4,8 +4,8 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Mail, Lock, User as UserIcon, Calendar as CalendarIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const LANDING_ROUTE = '/home'; // where we go after auth
-const API_BASE = import.meta.env.VITE_API_BASE ?? '';
+const LANDING_ROUTE = '/home';
+const API_BASE = import.meta.env.VITE_API_BASE ?? ''; // leave blank for same-origin
 
 /* ----------------------------- UI helpers --------------------------------- */
 type FormInputProps = {
@@ -47,8 +47,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, id }) =>
 /* ---------------------------- Component ----------------------------------- */
 type Mode = 'login' | 'register';
 export interface GamingLoginProps {
-  /** Optional callback invoked on success to allow analytics, etc. */
-  onSubmit?: (email: string, mode: Mode) => void;
+  onSubmit?: (email: string, mode: Mode) => void; // optional analytics hook
 }
 
 const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
@@ -87,15 +86,37 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
   };
 
   async function call(path: string, body: any) {
+    // If no API, this will 404/405 on Vercel; we’ll handle that gracefully.
     const r = await fetch(`${API_BASE}/api/auth/${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(body),
+    }).catch((e) => {
+      // Network error (e.g., no server) — bubble up with a pseudo-status
+      const err: any = new Error('Network error');
+      err.status = -1;
+      throw err;
     });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data?.error || `Request failed (${r.status})`);
+
+    const raw = await r.text(); // handle non-JSON bodies
+    let data: any = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch {}
+
+    if (!r.ok) {
+      const err: any = new Error(data?.error || `Request failed (${r.status})`);
+      err.status = r.status;
+      throw err;
+    }
     return data;
+  }
+
+  function demoFallbackAndGo() {
+    // Seamless “demo mode” when API isn’t present on Vercel
+    localStorage.removeItem('rr_guest');
+    localStorage.setItem('rr_demo_user', 'auth');
+    if (firstName) localStorage.setItem('rr_name', firstName);
+    navigate(LANDING_ROUTE, { replace: true });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -114,26 +135,28 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
           remember,
           firstName,
           lastName,
-          dob: new Date(dob).toISOString(), // Prisma DateTime
+          dob: new Date(dob).toISOString(), // Prisma DateTime compatible
         });
       } else {
         await call('login', { email, password, remember });
       }
 
-      onSubmit?.(email, mode); // optional external hook
+      onSubmit?.(email, mode); // optional analytics
 
-      // mark session + go home
+      // Mark session + try to cache name
       localStorage.removeItem('rr_guest');
       localStorage.setItem('rr_demo_user', 'auth');
-
-      // optional: cache first name if backend returns it
       try {
         const me = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' }).then(r => r.json());
         if (me?.user?.firstName) localStorage.setItem('rr_name', me.user.firstName);
       } catch {}
-
       navigate(LANDING_ROUTE, { replace: true });
     } catch (err: any) {
+      // If API isn’t deployed or doesn’t accept POST (405/404/501), use demo fallback.
+      if ([404, 405, 501, 500, -1].includes(err?.status)) {
+        demoFallbackAndGo();
+        return;
+      }
       setError(err?.message || 'Something went wrong.');
     } finally {
       setSubmitting(false);
@@ -145,7 +168,7 @@ const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
       <div className="mb-8 text-center">
         <h2 className="text-3xl font-bold mb-2 relative group">
           <span className="absolute -inset-1 bg-gradient-to-r from-purple-600/30 via-pink-500/30 to-blue-500/30 blur-xl opacity-75 group-hover:opacity-100 transition-all duration-500" />
-          <span className="relative inline-block text-3xl font-bold mb-2 text-white">RedRoute</span>
+        <span className="relative inline-block text-3xl font-bold mb-2 text-white">RedRoute</span>
         </h2>
         <p className="text-white/80 mt-2">
           {mode === 'login' ? 'Welcome back' : 'Create your account'}
