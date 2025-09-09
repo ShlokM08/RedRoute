@@ -1,17 +1,13 @@
 'use client';
-import React, { useState, useRef, useEffect } from 'react';
-import { Eye, EyeOff, Mail, Lock, User, Calendar } from 'lucide-react';
+import React, { useState } from 'react';
+import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-/** Route where RedRouteLandingUltra is mounted */
 const LANDING_ROUTE = '/app';
-/** Leave empty to use Vite proxy; otherwise put API origin */
-const API_BASE = '';
+const API_BASE = import.meta.env.VITE_API_BASE ?? '';
 
-/* ---------------------------------------------------------------------- */
-/* Reusable UI bits                                                       */
-/* ---------------------------------------------------------------------- */
-interface FormInputProps {
+/* ----------------------------- UI helpers --------------------------------- */
+type FormInputProps = {
   icon: React.ReactNode;
   type: string;
   placeholder: string;
@@ -19,7 +15,7 @@ interface FormInputProps {
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   required?: boolean;
   autoComplete?: string;
-}
+};
 const FormInput: React.FC<FormInputProps> = ({
   icon, type, placeholder, value, onChange, required, autoComplete,
 }) => (
@@ -37,7 +33,7 @@ const FormInput: React.FC<FormInputProps> = ({
   </div>
 );
 
-interface ToggleSwitchProps { checked: boolean; onChange: () => void; id: string; }
+type ToggleSwitchProps = { checked: boolean; onChange: () => void; id: string };
 const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, id }) => (
   <div className="relative inline-block w-10 h-5 cursor-pointer">
     <input type="checkbox" id={id} className="sr-only" checked={checked} onChange={onChange} />
@@ -47,71 +43,31 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, id }) =>
   </div>
 );
 
-export const VideoBackground: React.FC<{ videoUrl: string }> = ({ videoUrl }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  useEffect(() => { videoRef.current?.play().catch(() => {}); }, []);
-  return (
-    <div className="absolute inset-0 w-full h-full overflow-hidden">
-      <div className="absolute inset-0 bg-black/30 z-10" />
-      <video
-        ref={videoRef}
-        className="absolute inset-0 min-w-full min-h-full object-cover w-auto h-auto"
-        autoPlay loop muted playsInline
-      >
-        <source src={videoUrl} type="video/mp4" />
-      </video>
-    </div>
-  );
-};
-
-/* ---------------------------------------------------------------------- */
-/* Login + Register                                                       */
-/* ---------------------------------------------------------------------- */
+/* ---------------------------- Component ----------------------------------- */
 type Mode = 'login' | 'register';
-
-export interface LoginFormProps {
-  /** Optional callback; we still navigate to LANDING_ROUTE on success */
-  onSubmit?: (email: string, password: string, remember: boolean, mode: Mode) => void;
+export interface GamingLoginProps {
+  /** Optional callback invoked on success to allow analytics, etc. */
+  onSubmit?: (email: string, mode: Mode) => void;
 }
 
-export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
+const GamingLogin: React.FC<GamingLoginProps> = ({ onSubmit }) => {
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<Mode>('login');
-
-  // shared
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [password2, setPassword2] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
-
-  // register-only
-  const [password2, setPassword2] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName]   = useState('');
-  const [dob, setDob]             = useState(''); // yyyy-mm-dd
-
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const title = mode === 'login' ? 'Welcome back' : 'Create your account';
-  const cta   = submitting ? (mode === 'login' ? 'Logging in…' : 'Creating…') : (mode === 'login' ? 'Login' : 'Create Account');
-
-  const resetErr = () => setError(null);
-
+  /** We actually USE validate to satisfy TS and keep UX tight */
   const validate = (): string | null => {
-    if (!email || !password) return 'Please fill out all fields.';
+    if (!email || !password) return 'Please fill all fields.';
     if (!/\S+@\S+\.\S+/.test(email)) return 'Enter a valid email.';
-    if (password.length < 6) return 'Password should be at least 6 characters.';
-    if (mode === 'register') {
-      if (!firstName.trim() || !lastName.trim()) return 'Please enter your first and last name.';
-      if (password !== password2) return 'Passwords do not match.';
-      if (dob) {
-        // very light sanity check
-        const d = new Date(dob);
-        if (Number.isNaN(+d) || d.getFullYear() < 1900) return 'Enter a valid date of birth.';
-      }
-    }
+    if (password.length < 6) return 'Password must be at least 6 characters.';
+    if (mode === 'register' && password !== password2) return 'Passwords do not match.';
     return null;
   };
 
@@ -123,113 +79,67 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
       body: JSON.stringify(body),
     });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.error || `Request failed (${r.status})`);
+    if (!r.ok) throw new Error(data?.error || `Request failed (${r.status})`);
     return data;
   }
 
   async function handleSubmit(e: React.FormEvent) {
-  e.preventDefault();
-  setError(null);
+    e.preventDefault();
+    setError(null);
 
-  // (keep your own validation here)
+    // USE validate (fixes TS6133 and helps UX)
+    const v = validate();
+    if (v) { setError(v); return; }
 
-  setSubmitting(true);
-  try {
-    if (mode === "register") {
-      await call("register", { email, password, remember, firstName, lastName, dob });
-    } else {
-      await call("login", { email, password, remember });
+    setSubmitting(true);
+    try {
+      if (mode === 'register') {
+        await call('register', { email, password, remember });
+      } else {
+        await call('login', { email, password, remember });
+      }
+
+      // USE onSubmit callback so it's not unused (fixes TS6133)
+      onSubmit?.(email, mode);
+
+      // mark access + go
+      localStorage.removeItem('rr_guest');
+      localStorage.setItem('rr_demo_user', 'auth');
+
+      // optional: fetch /me to cache name
+      try {
+        const me = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' }).then(r => r.json());
+        if (me?.user?.firstName) localStorage.setItem('rr_name', me.user.firstName);
+      } catch {}
+
+      navigate(LANDING_ROUTE, { replace: true });
+    } catch (err: any) {
+      setError(err?.message || 'Something went wrong.');
+    } finally {
+      setSubmitting(false);
     }
-
-    // Double-check cookie is set by calling /me
-    const me = await fetch(`${API_BASE}/api/auth/me`, { credentials: "include" })
-      .then(r => r.json())
-      .catch(() => ({ user: null }));
-
-    // mark access for landing guard
-    if (me?.user) {
-      localStorage.setItem("rr_demo_user", "auth");
-      if (me.user.firstName) localStorage.setItem("rr_name", me.user.firstName);
-    } else {
-      // if cookie didn’t stick, still allow guest to avoid bounce loop
-      localStorage.setItem("rr_demo_user", "guest");
-    }
-
-    navigate("/app", { replace: true });
-  } catch (err: any) {
-    setError(err?.message || "Something went wrong.");
-  } finally {
-    setSubmitting(false);
-  }
-}
-
-
-  function proceedAsGuest() {
-    localStorage.setItem('rr_guest', '1');
-    localStorage.setItem('rr_demo_user', 'guest');
-    navigate(LANDING_ROUTE, { replace: true });
   }
 
   return (
-    <div className="p-8 rounded-2xl backdrop-blur-sm bg-black/50 border border-white/10 w-[min(480px,92vw)]">
+    <div className="p-8 rounded-2xl backdrop-blur-sm bg-black/50 border border-white/10 w-[min(440px,92vw)]">
       <div className="mb-8 text-center">
         <h2 className="text-3xl font-bold mb-2 relative group">
           <span className="absolute -inset-1 bg-gradient-to-r from-purple-600/30 via-pink-500/30 to-blue-500/30 blur-xl opacity-75 group-hover:opacity-100 transition-all duration-500" />
           <span className="relative inline-block text-3xl font-bold mb-2 text-white">RedRoute</span>
         </h2>
-        <p className="text-white/80 mt-2">{title}</p>
+        <p className="text-white/80 mt-2">{mode === 'login' ? 'Welcome back' : 'Create your account'}</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-        {/* Register-only names row */}
-        {mode === 'register' && (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <FormInput
-              icon={<User className="text-white/60" size={18} />}
-              type="text"
-              placeholder="First name"
-              value={firstName}
-              onChange={(e) => { resetErr(); setFirstName(e.target.value); }}
-              required
-              autoComplete="given-name"
-            />
-            <FormInput
-              icon={<User className="text-white/60" size={18} />}
-              type="text"
-              placeholder="Last name"
-              value={lastName}
-              onChange={(e) => { resetErr(); setLastName(e.target.value); }}
-              required
-              autoComplete="family-name"
-            />
-          </div>
-        )}
-
         <FormInput
           icon={<Mail className="text-white/60" size={18} />}
           type="email"
           placeholder="Email address"
           value={email}
-          onChange={(e) => { resetErr(); setEmail(e.target.value); }}
+          onChange={(e) => setEmail(e.target.value)}
           required
           autoComplete="email"
         />
-
-        {/* Register-only DOB */}
-        {mode === 'register' && (
-          <div className="relative">
-            <FormInput
-              icon={<Calendar className="text-white/60" size={18} />}
-              type="date"
-              placeholder="Date of birth"
-              value={dob}
-              onChange={(e) => { resetErr(); setDob(e.target.value); }}
-              autoComplete="bday"
-            />
-            {/* helper text (optional) */}
-            <div className="mt-1 text-[11px] text-white/60">DOB (optional)</div>
-          </div>
-        )}
 
         <div className="relative">
           <FormInput
@@ -237,14 +147,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
             type={showPassword ? 'text' : 'password'}
             placeholder={mode === 'register' ? 'Create a password' : 'Password'}
             value={password}
-            onChange={(e) => { resetErr(); setPassword(e.target.value); }}
+            onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
           />
           <button
             type="button"
             className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white"
-            onClick={() => setShowPassword((s) => !s)}
+            onClick={() => setShowPassword(s => !s)}
             aria-label={showPassword ? 'Hide password' : 'Show password'}
           >
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -257,7 +167,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
             type="password"
             placeholder="Confirm password"
             value={password2}
-            onChange={(e) => { resetErr(); setPassword2(e.target.value); }}
+            onChange={(e) => setPassword2(e.target.value)}
             required
             autoComplete="new-password"
           />
@@ -265,13 +175,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
 
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div onClick={() => setRemember((r) => !r)} className="cursor-pointer">
-              <ToggleSwitch checked={remember} onChange={() => setRemember((r) => !r)} id="remember-me" />
+            <div onClick={() => setRemember(r => !r)} className="cursor-pointer">
+              <ToggleSwitch checked={remember} onChange={() => setRemember(r => !r)} id="remember-me" />
             </div>
             <label
               htmlFor="remember-me"
               className="text-sm text-white/80 cursor-pointer"
-              onClick={() => setRemember((r) => !r)}
+              onClick={() => setRemember(r => !r)}
             >
               Remember me
             </label>
@@ -295,27 +205,19 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit }) => {
           disabled={submitting}
           className="w-full py-3 rounded-lg text-white font-medium transition-all bg-[#E50914] hover:bg-[#c40b13] focus:outline-none focus:ring-2 focus:ring-[#E50914]/50 disabled:opacity-70 disabled:cursor-not-allowed shadow-[0_10px_30px_rgba(229,9,20,0.35)]"
         >
-          {cta}
+          {submitting ? (mode === 'login' ? 'Logging in…' : 'Creating…') : (mode === 'login' ? 'Login' : 'Create Account')}
         </button>
 
         <button
           type="button"
-          onClick={proceedAsGuest}
+          onClick={() => { localStorage.setItem('rr_guest', '1'); localStorage.setItem('rr_demo_user', 'guest'); navigate(LANDING_ROUTE, { replace: true }); }}
           className="w-full py-3 rounded-lg text-white font-medium transition-all bg-white/10 hover:bg-white/15 border border-white/15"
         >
           Proceed as Guest
         </button>
       </form>
-
-      <div className="mt-8">
-        <div className="relative flex items-center justify-center">
-          <div className="border-t border-white/10 absolute w-full" />
-        </div>
-      </div>
     </div>
   );
 };
 
-/* Keep the same export shape you were using */
-const LoginPage = { LoginForm, VideoBackground };
-export default LoginPage;
+export default GamingLogin;
