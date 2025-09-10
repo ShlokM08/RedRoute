@@ -1,7 +1,8 @@
 generator client {
   provider      = "prisma-client-js"
   // Needed for Vercel. "native" = your dev box, "debian-openssl-3.0.x" = Vercel.
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+    binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+
 }
 
 datasource db {

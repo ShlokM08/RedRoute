@@ -5,10 +5,21 @@ declare global {
   var __prisma__: PrismaClient | undefined;
 }
 
-/** In prod, a single client; in dev, cache on global to avoid too many connections. */
-const prisma =
-  process.env.NODE_ENV === "production"
-    ? new PrismaClient()
-    : (globalThis.__prisma__ ?? (globalThis.__prisma__ = new PrismaClient()));
+export function getPrisma() {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    const err = new Error("Missing env.DATABASE_URL in serverless function");
+    (err as any).code = "NO_DATABASE_URL";
+    throw err;
+  }
 
-export default prisma;
+  if (global.__prisma__) return global.__prisma__;
+
+  const client = new PrismaClient({
+    log: ["error", "warn"],
+    datasources: { db: { url } },
+  });
+
+  if (process.env.NODE_ENV !== "production") global.__prisma__ = client;
+  return client;
+}

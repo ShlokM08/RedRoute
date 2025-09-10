@@ -1,17 +1,17 @@
-// api/db/list-users.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import prisma from "../_lib/prisma";
+import { getPrisma } from "../_lib/prisma";
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   try {
+    const prisma = getPrisma();
     const users = await prisma.user.findMany({
-      take: 5,
+      take: 50,
       orderBy: { createdAt: "desc" },
-      select: { id: true, email: true, firstName: true, createdAt: true }
+      select: { id: true, email: true, firstName: true, lastName: true, createdAt: true },
     });
-    const count = await prisma.user.count();
-    res.status(200).json({ ok: true, count, sample: users });
+    res.status(200).json({ ok: true, users });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.code || e?.name, message: e?.message });
+    console.error("LIST-USERS ERROR:", e);
+    res.status(500).json({ ok: false, error: e?.message || "failed" });
   }
 }
