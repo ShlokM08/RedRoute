@@ -1,21 +1,18 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import prisma from '../_lib/prisma.js'; // NOTE: .js is required with nodenext
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Use GET" });
-  }
-
+export default async function handler(_req: VercelRequest, res: VercelResponse) {
   try {
+    // Pick any existing column: id / price / rating / name / city
     const hotels = await prisma.hotel.findMany({
       include: { images: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ id: 'desc' }], // fallback to an existing field
+      take: 12,
     });
+
+    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
     return res.status(200).json(hotels);
   } catch (e: any) {
-    console.error("GET /api/hotels failed:", e);
-    return res.status(500).json({ error: String(e?.message ?? e) });
+    return res.status(500).json({ error: e?.message || 'Failed to load hotels' });
   }
 }
-//empty commi
