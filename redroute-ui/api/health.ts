@@ -1,28 +1,42 @@
 // api/health.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getPrisma } from "./_lib/prisma";
+import prisma from "./_lib/prisma";
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   try {
-    const prisma = getPrisma();
-    // Try a tiny query; if it fails, we'll catch and return details.
-    const count = await prisma.user.count().catch(() => -1);
+    const hasDbUrl = Boolean(process.env.DATABASE_URL);
+    const redactedUrl = hasDbUrl
+      ? process.env.DATABASE_URL!.replace(/:\/\/[^:]+:([^@]+)@/, "://***:***@")
+      : null;
+
+    // Quick connectivity probe (cheaper than a big query)
+    // If this throws, we capture the error detail below.
+    await prisma.$queryRaw`SELECT 1`;
+
+    // Simple query to prove client works
+    const userCount = await prisma.user.count().catch(() => -1);
 
     res.status(200).json({
       ok: true,
-      db: "ok",
-      userCount: count,
-      hasDbUrl: !!process.env.DATABASE_URL,
-      dbUrlKind: process.env.DATABASE_URL?.startsWith("file:") ? "sqlite-file" : "remote",
+      connected: true,
+      userCount,
       env: process.env.NODE_ENV,
+      dbUrlPresent: hasDbUrl,
+      dbUrlRedacted: redactedUrl,
     });
   } catch (e: any) {
+    // Log full error in Vercel function logs
+    console.error("HEALTH DB ERROR:", e);
+
+    // Return sanitized info to the client
     res.status(500).json({
       ok: false,
-      error: e?.message || "Function failed",
-      hasDbUrl: !!process.env.DATABASE_URL,
-      dbUrlKind: process.env.DATABASE_URL?.startsWith("file:") ? "sqlite-file" : "remote",
-      env: process.env.NODE_ENV,
+      connected: false,
+      errorName: e?.name,
+      errorCode: e?.code ?? e?.errorCode,
+      message: e?.message,
+      hint:
+        "Check DATABASE_URL on Vercel and ensure it has ?sslmode=require for Render Postgres.",
     });
   }
 }
