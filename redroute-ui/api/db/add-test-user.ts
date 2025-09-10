@@ -1,31 +1,27 @@
+// api/db/add-test-user.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getPrisma } from "../_lib/prisma";
+import prisma from "../_lib/prisma.js";
+import crypto from "node:crypto";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const prisma = getPrisma();
-    const email = String(req.query.email || "").trim().toLowerCase();
-    const firstName = String(req.query.firstName || "Test");
-    const lastName = String(req.query.lastName || "User");
+    // Allow GET in a browser for convenience
+    const email =
+      (req.body && typeof req.body === "object" && (req.body as any).email) ||
+      `test+${Date.now()}@example.com`;
 
-    if (!email || !email.includes("@")) {
-      return res.status(400).json({ ok: false, error: "Provide ?email=someone@example.com" });
-    }
-
-    const user = await prisma.user.upsert({
-      where: { email },
-      update: { firstName, lastName },
-      create: {
+    const user = await prisma.user.create({
+      data: {
         email,
-        passwordHash: "debug_only_do_not_use",
-        firstName,
-        lastName,
+        passwordHash: crypto.randomUUID().replace(/-/g, ""),
+        firstName: "Test",
+        lastName: "User",
       },
+      select: { id: true, email: true, firstName: true, lastName: true, createdAt: true },
     });
 
     res.status(200).json({ ok: true, user });
   } catch (e: any) {
-    console.error("ADD-TEST-USER ERROR:", e);
-    res.status(500).json({ ok: false, error: e?.message || "failed" });
+    res.status(500).json({ ok: false, error: e?.message ?? String(e) });
   }
 }

@@ -1,26 +1,20 @@
+// api/health.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getPrisma } from "./_lib/prisma";
+import prisma from "./_lib/prisma.js";
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   try {
-    const prisma = getPrisma();
-    const count = await prisma.user.count();
+    // cheap check the DB is reachable
+    await prisma.$queryRaw`SELECT 1`;
+
+    const count = await prisma.user.count().catch(() => -1);
     res.status(200).json({
       ok: true,
       db: "connected",
       userCount: count,
-      regionHint: process.env.VERCEL_REGION || "unknown",
+      env: process.env.NODE_ENV,
     });
   } catch (e: any) {
-    console.error("HEALTH ERROR:", e);
-    res.status(500).json({
-      ok: false,
-      db: "error",
-      error: e?.code || e?.message || "unknown",
-      env: {
-        DATABASE_URL_present: !!process.env.DATABASE_URL,
-        DIRECT_URL_present: !!process.env.DIRECT_URL,
-      },
-    });
+    res.status(500).json({ ok: false, error: e?.message ?? String(e) });
   }
 }
