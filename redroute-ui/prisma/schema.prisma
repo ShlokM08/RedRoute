@@ -1,84 +1,64 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Needed for Vercel. "native" = your dev box, "debian-openssl-3.0.x" = Vercel.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-/**
- * ======================= User (for auth) =======================
- */
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
+  id           String   @id @default(cuid())
+  email        String   @unique
   passwordHash String
   firstName    String?
   lastName     String?
   dob          DateTime?
   bookings     Booking[]
   favorites    Favorite[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
-/**
- * ====================== Hotel Details ========================
- */
-
 model Hotel {
-  id          Int          @id @default(autoincrement())
-  name        String
-  city        String
-  price       Int
-  rating      Float
-  description String?
-  images      HotelImage[] // relation used by your seed
-  bookings    Booking[]
-  favorites   Favorite[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id       String @id @default(cuid())
+  name     String
+  city     String
+  price    Int
+  rating   Float?
+  images   HotelImage[]
+  bookings Booking[]
+  favorites Favorite[]
 }
 
 model HotelImage {
-  id      Int     @id @default(autoincrement())
+  id      String @id @default(cuid())
   url     String
   alt     String?
-  hotelId Int
-  hotel   Hotel   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-
+  hotel   Hotel  @relation(fields: [hotelId], references: [id])
+  hotelId String
   @@index([hotelId])
 }
 
 model Booking {
-  id        Int       @id @default(autoincrement())
-  hotelId   Int
-  userId    String? // now FK -> User.id (nullable is fine)
-  startDate DateTime?
-  endDate   DateTime?
-  guests    Int       @default(2)
-  status    String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([hotelId])
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  hotelId   String
+  createdAt DateTime @default(now())
   @@index([userId])
+  @@index([hotelId])
 }
 
 model Favorite {
-  id        Int      @id @default(autoincrement())
-  hotelId   Int
-  userId    String
-  createdAt DateTime @default(now())
-
-  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([hotelId, userId])
+  id      String @id @default(cuid())
+  user    User   @relation(fields: [userId], references: [id])
+  userId  String
+  hotel   Hotel  @relation(fields: [hotelId], references: [id])
+  hotelId String
+  @@unique([userId, hotelId])
   @@index([userId])
 }
