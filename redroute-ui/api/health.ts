@@ -15,7 +15,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       env: process.env.NODE_ENV,
       
     });
-    fetch('/api/db/list-users').then(r => r.json()).then(console.log);
+    
 
   } catch (e: any) {
     res.status(500).json({ ok: false, error: e?.message ?? String(e) });
