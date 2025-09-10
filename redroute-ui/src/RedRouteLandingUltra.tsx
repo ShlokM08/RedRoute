@@ -1170,12 +1170,7 @@ export default function RedRouteLandingUltra() {
     <div className="min-h-screen w-full bg-black font-sans">
       <ScrollProgress />
 
-      {/* Greeting chip next to Logout */}
-      {firstName && (
-        <div className="fixed top-5 right-28 z-50 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-white">
-          Welcome, {firstName}
-        </div>
-      )}
+    
 
       <button
         onClick={logout}
