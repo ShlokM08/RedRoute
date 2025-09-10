@@ -1148,13 +1148,7 @@ export default function RedRouteLandingUltra() {
   }, []);
 
   // First name chip (from localStorage)
-  const [firstName, setFirstName] = useState<string | null>(null);
-  useEffect(() => {
-    try {
-      const n = localStorage.getItem("rr_name");
-      if (n) setFirstName(n.split(" ")[0]);
-    } catch {}
-  }, []);
+  
 
   const logout = () => {
     try {
