@@ -46,10 +46,9 @@ export default function App() {
         {/* Protected app */}
         <Route element={<RequireAuth />}>
           <Route path="/home" element={<RedRouteLandingUltra />} />
-
-          {/* ✅ New hotel listing & detail routes */}
-          <Route path="/hotels" element={<HotelsList />} />
           <Route path="/hotels/:id" element={<HotelDetail />} />
+
+          
 
           <Route
             path="/square"

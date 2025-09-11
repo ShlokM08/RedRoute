@@ -992,6 +992,7 @@ type HotelImage = { id: string; url: string; alt?: string | null };
 type Hotel = { id: string; name: string; city: string; price: number; rating: number | null; images: HotelImage[]; };
 
 function Featured() {
+  const navigate = useNavigate();
   const [items, setItems] = React.useState<Hotel[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -1025,26 +1026,34 @@ function Featured() {
         {loading && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-60 rounded-2xl bg-white/5 animate-pulse border border-white/10" />
+              <div
+                key={i}
+                className="h-60 rounded-2xl bg-white/5 animate-pulse border border-white/10"
+              />
             ))}
           </div>
         )}
 
         {!loading && error && (
-          <div className="mt-2 text-red-400 text-base">Couldn’t load hotels: {error}</div>
+          <div className="mt-2 text-red-400 text-base">
+            Couldn’t load hotels: {error}
+          </div>
         )}
 
         {!loading && !error && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {items.map((h) => {
               const img = h.images?.[0]?.url || "/images/featured_hotel.avif";
-              const src = img.startsWith("http") ? img : img;
-
               return (
-                <article key={h.id} className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
+                <article
+                  key={h.id}
+                  className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm cursor-pointer hover:brightness-110 transition"
+                  onClick={() => navigate(`/hotels/${h.id}`)}
+                  title={`View details for ${h.name}`}
+                >
                   <div className="relative h-60 w-full overflow-hidden">
                     <img
-                      src={src}
+                      src={img}
                       alt={h.images?.[0]?.alt ?? h.name}
                       className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
                       loading="lazy"
@@ -1086,7 +1095,6 @@ function Featured() {
     </section>
   );
 }
-
 /* --------------------------------- Events ---------------------------------- */
 function EventStrip() {
   const ev = [
