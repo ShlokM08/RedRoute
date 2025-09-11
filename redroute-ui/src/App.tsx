@@ -9,7 +9,7 @@ import {
 import SignIn from "./SignIn";
 import RedRouteLandingUltra from "./RedRouteLandingUltra";
 import SquareImage from "./components/SquareImage";
-import HotelsList from "./HotelsList";      // ⬅️ Import hotels listing
+//import HotelsList from "./HotelsList";      // ⬅️ Import hotels listing
 import HotelDetail from "./HotelDetail";    // ⬅️ Import hotel detail page
 import { hasValidSession, clearSession } from "./session";
 
