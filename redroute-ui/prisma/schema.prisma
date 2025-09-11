@@ -1,8 +1,7 @@
 generator client {
   provider      = "prisma-client-js"
   // Needed for Vercel. "native" = your dev box, "debian-openssl-3.0.x" = Vercel.
-    binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
-
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -11,56 +10,56 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String     @id @default(cuid())
+  email        String     @unique
   passwordHash String
   firstName    String?
   lastName     String?
   dob          DateTime?
   bookings     Booking[]
   favorites    Favorite[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
-
 model Hotel {
-  id       String @id @default(cuid())
-  name     String
-  city     String
-  price    Int
-  rating   Float?
-  images   HotelImage[]
-  bookings Booking[]
+  id        Int          @id @default(autoincrement())
+  name      String
+  city      String
+  price     Int
+  rating    Float?
+  createdAt DateTime     @default(now())
+  images    HotelImage[]
+  bookings  Booking[]
   favorites Favorite[]
 }
 
 model HotelImage {
-  id      String @id @default(cuid())
+  id      Int     @id @default(autoincrement())
   url     String
   alt     String?
-  hotel   Hotel  @relation(fields: [hotelId], references: [id])
-  hotelId String
-  @@index([hotelId])
+  hotelId Int
+  hotel   Hotel   @relation(fields: [hotelId], references: [id])
 }
 
 model Booking {
-  id        String   @id @default(cuid())
-  user      User     @relation(fields: [userId], references: [id])
+  id        Int      @id @default(autoincrement())
   userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  hotelId   Int
   hotel     Hotel    @relation(fields: [hotelId], references: [id])
-  hotelId   String
+  checkIn   DateTime
+  checkOut  DateTime
   createdAt DateTime @default(now())
-  @@index([userId])
-  @@index([hotelId])
 }
 
 model Favorite {
-  id      String @id @default(cuid())
-  user    User   @relation(fields: [userId], references: [id])
-  userId  String
-  hotel   Hotel  @relation(fields: [hotelId], references: [id])
-  hotelId String
-  @@unique([userId, hotelId])
-  @@index([userId])
+  id        Int      @id @default(autoincrement())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  hotelId   Int
+  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([hotelId, userId])
 }
