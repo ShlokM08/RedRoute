@@ -26,7 +26,7 @@ async function main() {
 
   await prisma.hotel.create({
     data: {
-      name: "Coastal Escape Villa",
+      name: "Coastal  Villa",
       city: "Bali",
       price: 259,
       rating: 4.8,
