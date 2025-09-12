@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+
 import {
   motion,
   useMotionValue,
@@ -11,6 +12,7 @@ import {
   AnimatePresence,
 } from "framer-motion";
 import { Button } from "./components/ui/button";
+
 import {
   Calendar,
   MapPin,
@@ -29,11 +31,196 @@ import {
   Plus,
 } from "lucide-react";
 
-/* ─────────────────────────────────────────── utils ─────────────────────────────────────────── */
+/* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
+function KenBurnsShowcase() {
+  const slides = [
+    { img: "/images/event_arena.jpeg",   title: "Arena Night",      sub: "Citywide tour" },
+    { img: "/images/event_rooftop.jpeg", title: "Rooftop Cinema",   sub: "Fridays 8pm" },
+    { img: "/images/event_theatre.avif", title: "Old Town Theatre", sub: "Matinee daily" },
+  ];
+  const seq = [...slides, ...slides];
+
+  return (
+    <section className="px-6 pb-16 text-white">
+      <div className="mx-auto max-w-7xl overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+        <div className="relative flex animate-[kbmarquee_30s_linear_infinite]">
+          {seq.map((s, i) => (
+            <div key={i} className="relative h-56 min-w-[70%] md:h-72 md:min-w-[40%] overflow-hidden">
+              <motion.img
+                src={s.img}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg"; }}
+                alt={s.title}
+                className="absolute inset-0 h-full w-full object-cover"
+                initial={{ scale: 1.05, x: 0 }}
+                whileInView={{ scale: 1.18, x: 15 }}
+                transition={{ duration: 10, ease: "linear" }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/0" />
+              <div className="absolute bottom-3 left-4">
+                <div className="text-sm text-white/80">{s.sub}</div>
+                <div className="text-xl font-semibold">{s.title}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <style>{`
+        @keyframes kbmarquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+        @media (prefers-reduced-motion: reduce) { .animate-[kbmarquee_30s_linear_infinite]{animation:none} }
+      `}</style>
+    </section>
+  );
+}
+
 const RR = { red: "#E50914" } as const;
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
-/* ────────────────────────────────────────── inputs ────────────────────────────────────────── */
+/* --------------------------- KINETIC HEADLINE ------------------------------ */
+function Kinetic({ text, className = "" }: { text: string; className?: string }) {
+  const words = text.split(" ");
+  let idx = 0;
+  return (
+    <h1 className={`mx-auto text-center font-black leading-[1.05] tracking-tight ${className}`}>
+      {words.map((w, wi) => {
+        const letters = w.split("").map((ch, i) => {
+          const delay = 0.02 * idx++;
+          return (
+            <motion.span
+              key={`${wi}-${i}`}
+              initial={{ y: "1.2em", rotateX: -90, opacity: 0 }}
+              animate={{ y: 0, rotateX: 0, opacity: 1 }}
+              transition={{ delay, type: "spring", stiffness: 250, damping: 20 }}
+              className="inline-block [perspective:600px]"
+            >
+              <span className="inline-block bg-clip-text text-transparent [background-image:linear-gradient(180deg,#fff,rgba(255,255,255,0.75))]">
+                {ch}
+              </span>
+            </motion.span>
+          );
+        });
+        return (
+          <span key={wi} className="inline-block whitespace-nowrap mr-2">
+            {letters}
+          </span>
+        );
+      })}
+    </h1>
+  );
+}
+
+/* ---------------------------- FIELD WRAPPER -------------------------------- */
+function Field({
+  icon,
+  label,
+  children,
+}: {
+  icon?: React.ReactNode;
+  label: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div role="group" className="flex flex-col gap-2 rounded-2xl p-2 text-white/90">
+      <div className="flex items-center gap-2 text-sm opacity-80 min-h-[20px]">
+        {icon != null && (
+          <span className="grid place-content-center rounded-md border border-white/15 bg-white/10 p-1">
+            {icon}
+          </span>
+        )}
+        <span>{label}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/* ----------------------------- TILT CARD ----------------------------------- */
+function TiltCard({ children }: { children: React.ReactNode }) {
+  const rx = useSpring(0, { stiffness: 120, damping: 12 });
+  const ry = useSpring(0, { stiffness: 120, damping: 12 });
+
+  function onMove(e: React.MouseEvent<HTMLDivElement>) {
+    const el = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - el.left) / el.width;
+    const y = (e.clientY - el.top) / el.height;
+    ry.set(clamp((x - 0.5) * 16, -8, 8));
+    rx.set(clamp(-(y - 0.5) * 16, -8, 8));
+  }
+  function onLeave() { rx.set(0); ry.set(0); }
+
+  return (
+    <motion.div
+      style={{ rotateX: rx, rotateY: ry, transformPerspective: 900 }}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/* ------------------------- SCROLL PROGRESS BAR ----------------------------- */
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 140, damping: 30, restDelta: 0.001 });
+  return (
+    <motion.div
+      className="fixed left-0 right-0 top-0 z-[9999] h-1 origin-left bg-gradient-to-r from-red-600 via-white/80 to-red-600"
+      style={{ scaleX }}
+    />
+  );
+}
+
+/* ----------------------- THEMED CALENDAR POPOVER --------------------------- */
+type DayCell = { date: Date; currentMonth: boolean; isToday: boolean };
+
+function useMonthMatrix(year: number, month: number) {
+  return useMemo(() => {
+    const first = new Date(year, month, 1);
+    const startWeekday = (first.getDay() + 6) % 7; // Mon=0
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const prevMonthDays = new Date(year, month, 0).getDate();
+
+    const cells: DayCell[] = [];
+    for (let i = startWeekday - 1; i >= 0; i--) {
+      const d = prevMonthDays - i;
+      const date = new Date(year, month - 1, d);
+      cells.push({ date, currentMonth: false, isToday: isSameDate(date, new Date()) });
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(year, month, d);
+      cells.push({ date, currentMonth: true, isToday: isSameDate(date, new Date()) });
+    }
+    while (cells.length % 7 !== 0) {
+      const last = cells[cells.length - 1]?.date ?? new Date(year, month, 1);
+      const date = new Date(last);
+      date.setDate(date.getDate() + 1);
+      cells.push({ date, currentMonth: false, isToday: isSameDate(date, new Date()) });
+    }
+    return cells;
+  }, [year, month]);
+}
+
+const monthName = (y: number, m: number) =>
+  new Date(y, m, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
+
+const isSameDate = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate();
+
+const isWithin = (d: Date, a: Date | null, b: Date | null) => {
+  if (!a || !b) return false;
+  const t = +new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const t1 = +new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const t2 = +new Date(b.getFullYear?.() ?? b.getFullYear(), b.getMonth(), b.getDate()); // defensive
+  const [min, max] = t1 <= t2 ? [t1, t2] : [t2, t1];
+  return t > min && t < max;
+};
+
+const fmtShort = (d: Date) =>
+  d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+/* ------------------------ INPUT PRIMITIVE (used by picker) ------------------ */
 function PillInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
@@ -42,13 +229,12 @@ function PillInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
         "h-10 w-full rounded-xl px-3 text-left text-sm",
         "border border-white/15 bg-white/5 text-white/90 placeholder-white/60",
         "hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-red-600/60",
-        (props.className ?? ""),
       ].join(" ")}
     />
   );
 }
 
-/* ─────────────────────────────────────── destination ─────────────────────────────────────── */
+/* ------------------------ DESTINATION PICKER (autocomplete) ---------------- */
 type Destination = {
   id: string;
   label: string;
@@ -76,25 +262,22 @@ const DESTINATIONS: Destination[] = [
   { id: "maldives", label: "Maldives",               meta: "Region • Indian Ocean", emoji: "🏝️", group: "Regions", tokens: "maldives indian ocean resort islands" },
 ];
 
-const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+function normalize(s: string) {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
 
-function DestinationPicker({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
+function DestinationPicker() {
+  const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const filtered = useMemo(() => {
-    const q = normalize(value);
+    const q = normalize(query);
     if (!q) return DESTINATIONS;
     return DESTINATIONS.filter((d) => d.tokens.includes(q));
-  }, [value]);
+  }, [query]);
 
   const grouped = useMemo(() => {
     const out: Record<Destination["group"], Destination[]> = { Popular: [], Cities: [], Regions: [] };
@@ -138,7 +321,7 @@ function DestinationPicker({
       if (!open) return;
       e.preventDefault();
       const sel = filtered.find((d) => d.id === active) ?? filtered[0];
-      if (sel) { onChange(sel.label); setOpen(false); }
+      if (sel) { setQuery(sel.label); setOpen(false); }
     } else if (e.key === "Escape") {
       if (open) { e.preventDefault(); setOpen(false); }
     }
@@ -150,6 +333,11 @@ function DestinationPicker({
     el?.scrollIntoView({ block: "nearest" });
   }
 
+  function select(d: Destination) {
+    setQuery(d.label);
+    setOpen(false);
+  }
+
   return (
     <div ref={rootRef} className="relative">
       <PillInput
@@ -158,8 +346,8 @@ function DestinationPicker({
         aria-controls="destination-listbox"
         aria-activedescendant={active ? `dest-${active}` : undefined}
         placeholder="Where to?"
-        value={value}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
         autoComplete="off"
@@ -178,8 +366,8 @@ function DestinationPicker({
             role="listbox"
             ref={listRef}
           >
-            {(["Popular", "Cities", "Regions"] as const).map((g) => {
-              const items = grouped[g];
+            {["Popular", "Cities", "Regions"].map((g) => {
+              const items = (grouped as any)[g] as Destination[];
               if (!items || items.length === 0) return null;
               return (
                 <div key={g} className="px-2 py-2">
@@ -188,7 +376,7 @@ function DestinationPicker({
                   </div>
                   {items.map((d) => {
                     const isActive = active === d.id;
-                    const isSelected = normalize(value) === normalize(d.label);
+                    const isSelected = normalize(query) === normalize(d.label);
                     return (
                       <button
                         type="button"
@@ -198,7 +386,7 @@ function DestinationPicker({
                         role="option"
                         aria-selected={isSelected}
                         onMouseEnter={() => setActive(d.id)}
-                        onClick={() => { onChange(d.label); setOpen(false); }}
+                        onClick={() => select(d)}
                         className={[
                           "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm",
                           "hover:bg-white/10 focus:bg-white/10",
@@ -227,28 +415,23 @@ function DestinationPicker({
   );
 }
 
-/* ───────────────────────────────────────── guests ───────────────────────────────────────── */
+/* ----------------------- GUESTS POPOVER (adults/kids) ---------------------- */
 type Guests = { adults: number; kids: number };
 const MIN_ADULTS = 1;
 const MAX_TOTAL = 10;
 
-function GuestsPopover({
-  value,
-  onChange,
-}: {
-  value: Guests;
-  onChange: (v: Guests) => void;
-}) {
+function GuestsPopover() {
   const [open, setOpen] = useState(false);
+  const [g, setG] = useState<Guests>({ adults: 2, kids: 0 });
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  const total = value.adults + value.kids;
+  const total = g.adults + g.kids;
   const label = useMemo(() => {
     const parts: string[] = [];
-    parts.push(`${value.adults} ${value.adults === 1 ? "Adult" : "Adults"}`);
-    if (value.kids > 0) parts.push(`${value.kids} ${value.kids === 1 ? "Kid" : "Kids"}`);
+    parts.push(`${g.adults} ${g.adults === 1 ? "Adult" : "Adults"}`);
+    if (g.kids > 0) parts.push(`${g.kids} ${g.kids === 1 ? "Kid" : "Kids"}`);
     return parts.join(", ") || "Guests";
-  }, [value]);
+  }, [g]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -261,16 +444,16 @@ function GuestsPopover({
   }, [open]);
 
   function bump(key: keyof Guests, delta: number) {
-    let next: Guests = { ...value, [key]: (value[key] as number) + delta } as Guests;
-    if (key === "adults") next.adults = Math.max(MIN_ADULTS, next.adults);
-    next.kids = Math.max(0, next.kids);
-    if (next.adults + next.kids > MAX_TOTAL) return; // ignore
-    onChange(next);
+    setG((prev) => {
+      let next = { ...prev, [key]: prev[key] + delta } as Guests;
+      if (key === "adults") next.adults = Math.max(MIN_ADULTS, next.adults);
+      next.kids = Math.max(0, next.kids);
+      if (next.adults + next.kids > MAX_TOTAL) return prev;
+      return next;
+    });
   }
 
-  function Row({
-    title, note, value, onMinus, onPlus, disabledMinus, disabledPlus,
-  }: {
+  function Row({ title, note, value, onMinus, onPlus, disabledMinus, disabledPlus }: {
     title: string; note?: string; value: number;
     onMinus: () => void; onPlus: () => void;
     disabledMinus?: boolean; disabledPlus?: boolean;
@@ -332,25 +515,25 @@ function GuestsPopover({
             <Row
               title="Adults"
               note="Ages 13+"
-              value={value.adults}
+              value={g.adults}
               onMinus={() => bump("adults", -1)}
               onPlus={() => bump("adults", +1)}
-              disabledMinus={value.adults <= MIN_ADULTS}
+              disabledMinus={g.adults <= MIN_ADULTS}
               disabledPlus={total >= MAX_TOTAL}
             />
             <Row
               title="Kids"
               note="Ages 2–12"
-              value={value.kids}
+              value={g.kids}
               onMinus={() => bump("kids", -1)}
               onPlus={() => bump("kids", +1)}
-              disabledMinus={value.kids <= 0}
+              disabledMinus={g.kids <= 0}
               disabledPlus={total >= MAX_TOTAL}
             />
             <div className="mt-2 flex items-center justify-between gap-2">
               <button
                 className="text-[12px] underline text-white/80 hover:text-white"
-                onClick={() => onChange({ adults: 2, kids: 0 })}
+                onClick={() => setG({ adults: 2, kids: 0 })}
               >
                 Reset
               </button>
@@ -369,7 +552,367 @@ function GuestsPopover({
   );
 }
 
-/* ───────────────────────────────────── helpers / little UI ───────────────────────────────────── */
+/* ----------------------- CALENDAR POPOVER (pill-styled) -------------------- */
+function CalendarPopover() {
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
+
+  const now = new Date();
+  const [viewY, setViewY] = useState(now.getFullYear());
+  const [viewM, setViewM] = useState(now.getMonth());
+
+  const [start, setStart] = useState<Date | null>(null);
+  const [end, setEnd] = useState<Date | null>(null);
+
+  const cells = useMonthMatrix(viewY, viewM);
+
+  const onPrev = () => {
+    const m = viewM - 1;
+    if (m < 0) { setViewM(11); setViewY((y) => y - 1); } else setViewM(m);
+  };
+  const onNext = () => {
+    const m = viewM + 1;
+    if (m > 11) { setViewM(0); setViewY((y) => y + 1); } else setViewM(m);
+  };
+
+  const onPick = (d: Date) => {
+    if (!start || (start && end)) {
+      setStart(d);
+      setEnd(null);
+    } else {
+      setEnd(d);
+      setTimeout(() => setOpen(false), 120);
+    }
+  };
+
+  const label =
+    start && end
+      ? `${fmtShort(start)} — ${fmtShort(end)}`
+      : start
+      ? `${fmtShort(start)} — …`
+      : "";
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (!open) return;
+      const t = e.target as Node;
+      if (
+        popRef.current &&
+        !popRef.current.contains(t) &&
+        anchorRef.current &&
+        !anchorRef.current.contains(t)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const dow = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const isSelected = useCallback(
+    (d: Date) => (start && isSameDate(d, start)) || (end && isSameDate(d, end)),
+    [start, end]
+  );
+
+  return (
+    <div ref={anchorRef} className="relative">
+      {/* Use the same pill as Destination so styling/height match */}
+      <PillInput
+        readOnly
+        value={label}
+        placeholder="Select dates"
+        onClick={() => setOpen(true)}
+        onFocus={() => setOpen(true)}
+        role="combobox"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label="Select dates"
+      />
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            ref={popRef}
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 240, damping: 20 }}
+            className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg-[rgba(0,0,0,0.7)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
+            role="dialog"
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.06]">
+              <button
+                onClick={onPrev}
+                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
+                aria-label="Previous month"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <div className="text-sm font-semibold">{monthName(viewY, viewM)}</div>
+              <button
+                onClick={onNext}
+                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
+                aria-label="Next month"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+
+            <div className="px-3 py-2">
+              <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
+                {dow.map((d) => (<div key={d} className="py-1">{d}</div>))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1">
+                {cells.map(({ date, currentMonth, isToday }, idx) => {
+                  const selected = isSelected(date);
+                  const inRange = isWithin(date, start, end);
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => onPick(date)}
+                      className={[
+                        "relative h-10 rounded-lg text-sm",
+                        "border border-white/10",
+                        currentMonth ? "text-white/90" : "text-white/40",
+                        "bg-white/5 hover:bg-white/10",
+                        selected ? "bg-[#E50914] text-white border-[#E50914]" : "",
+                        inRange ? "bg-white/10" : "",
+                        isToday && !selected ? "ring-1 ring-white/30" : "",
+                      ].join(" ")}
+                      title={date.toDateString()}
+                    >
+                      {date.getDate()}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-white/60">
+                <span>Pick start, then end</span>
+                <button className="underline hover:text-white" onClick={() => { setStart(null); setEnd(null); }}>
+                  Clear
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function Testimonials() {
+  const quotes = [
+    { name: "Aman Mehra", role: "Product Lead", text: "RedRoute feels like a movie trailer — fast, beautiful, and I’m checked out in seconds.", initials: "AM", rating: 5 },
+    { name: "Sara Khan", role: "Event Planner", text: "Searching hotels + events in one flow is brilliant. The micro-interactions are 👌", initials: "SK", rating: 5 },
+  ];
+  return (
+    <section className="px-6 pb-16 text-white">
+      <div className="mx-auto max-w-7xl">
+        <h2 className="mb-6 text-3xl font-bold">What people say</h2>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {quotes.map((q) => (
+            <div key={q.name} className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+              <div className="flex items-start gap-4">
+                <div className="grid h-12 w-12 place-items-center rounded-full bg-white/15 text-sm font-semibold">{q.initials}</div>
+                <div className="flex-1">
+                  <div className="mb-2 flex gap-1 text-white/90">
+                    {Array.from({ length: q.rating }).map((_, i) => (
+                      <Star key={i} className="h-4 w-4 fill-white/90" />
+                    ))}
+                  </div>
+                  <p className="text-white/85">{q.text}</p>
+                  <div className="mt-3 text-sm text-white/70">
+                    {q.name} • {q.role}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SiteFooter() {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="px-6 pb-16 pt-10 text-white">
+      <div className="mx-auto max-w-7xl rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+        <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+          <div>
+            <div className="text-2xl font-black">RedRoute</div>
+            <div className="text-white/70">Hotels • Events • Experiences</div>
+          </div>
+          <nav className="flex gap-6 text-sm text-white/80">
+            <a href="#" className="hover:text-white">About</a>
+            <a href="#" className="hover:text-white">Careers</a>
+            <a href="#" className="hover:text-white">Help</a>
+            <a href="#" className="hover:text-white">Privacy</a>
+          </nav>
+        </div>
+        <div className="mt-6 border-t border-white/10 pt-4 text-sm text-white/60">
+          © {year} RedRoute. All rights reserved.
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+/* ----------------------------- HERO SECTION -------------------------------- */
+/** NOTE: Black background only (no video). */
+/* ----------------------------- HERO SECTION -------------------------------- */
+/** NOTE: Black background only (no video). */
+function Hero() {
+  // cursor glow & parallax (kept)
+  const mx = useMotionValue(0.5);
+  const my = useMotionValue(0.5);
+  const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
+  const pPanel = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
+
+  const glowX = useTransform(mx, (v) => `${v * 100}%`);
+  const glowY = useTransform(my, (v) => `${v * 100}%`);
+
+  // ---- Personalized headline: try localStorage → API /me → email fallback
+  const [firstName, setFirstName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fromLS = (localStorage.getItem("rr_name") || "").trim();
+    if (fromLS) {
+      setFirstName(fromLS.split(" ")[0]);
+      return;
+    }
+
+    (async () => {
+      // Try your API if present
+      try {
+        const r = await fetch("/api/auth/me", { credentials: "include" });
+        if (r.ok) {
+          const me = await r.json().catch(() => null);
+          const fn: string | undefined =
+            me?.user?.firstName || me?.firstName || me?.user?.name || me?.name;
+          if (fn && fn.trim()) {
+            localStorage.setItem("rr_name", fn);
+            setFirstName(fn.split(" ")[0]);
+            return;
+          }
+        }
+      } catch {
+        // ignore — we’ll try the email fallback below
+      }
+
+      // Fallback: derive a name from cached email if you store it
+      const email = (localStorage.getItem("rr_email") || "").trim();
+      if (email.includes("@")) {
+        const guess = email.split("@")[0];
+        if (guess) setFirstName(guess);
+      }
+    })();
+  }, []);
+
+  // Keep the name glued to "RedRoute" on the same line using NBSP
+  const headline = `Welcome to RedRoute${firstName ? `,\u00A0${firstName}` : ""}`;
+
+  function onMove(e: React.MouseEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    mx.set((e.clientX - r.left) / r.width);
+    my.set((e.clientY - r.top) / r.height);
+  }
+
+  return (
+    <section className="relative text-white z-40 isolate bg-black">
+      {/* OUTER BANNER — black canvas with subtle gradients (no video) */}
+      <div className="relative h-[55vh] md:h-[48vh] w-full overflow-visible">
+        {/* soft overlay gradients */}
+        <div className="absolute inset-0 -z-10 [background:radial-gradient(900px_circle_at_20%_10%,rgba(229,9,20,0.20),transparent_60%),radial-gradient(900px_circle_at_85%_15%,rgba(255,107,107,0.16),transparent_65%)]" />
+        {/* rotating beams */}
+        <div className="pointer-events-none absolute -left-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-25 mix-blend-screen">
+          <div className="h-full w-full animate-[spin_36s_linear_infinite] [background:conic-gradient(from_0deg_at_50%_50%,rgba(229,9,20,0.28),transparent_30%,rgba(255,255,255,0.14),transparent_60%,rgba(229,9,20,0.22),transparent_90%)]" />
+        </div>
+        <div className="pointer-events-none absolute -right-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-20 mix-blend-screen">
+          <div className="h-full w-full animate-[spin_48s_linear_infinite_reverse] [background:conic-gradient(from_140deg_at_50%_50%,rgba(255,255,255,0.12),transparent_25%,rgba(229,9,20,0.22),transparent_65%,rgba(255,255,255,0.12),transparent_95%)]" />
+        </div>
+
+        {/* INNER BANNER (glass) */}
+        <div className="absolute inset-0 grid place-items-center px-4" onMouseMove={onMove}>
+          <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-visible z-30">
+            {/* cursor glow */}
+            <motion.div
+              className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
+              style={{ left: glowX, top: glowY, translateX: "-50%", translateY: "-50%" }}
+            />
+
+            <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
+              {/* LEFT: headline + actions */}
+              <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
+                <Kinetic text={headline} className="text-4xl md:text-6xl" />
+                <p className="max-w-xl text-sm md:text-base text-white/85">
+                  Hotels. Events. Experiences. Your gateway to the time of your life—anywhere, anytime!
+                </p>
+                <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                  <MagneticButton />
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] md:text-sm text-white/75">
+                  <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Trusted by 120k+</div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">4.9★ rating</div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Lightning checkout</div>
+                </div>
+              </motion.div>
+
+              {/* RIGHT: compact search */}
+              <motion.div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur" style={{ transform: pPanel }}>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
+                  <Field icon={<MapPin className="size-4" />} label="Destination">
+                    <DestinationPicker />
+                  </Field>
+                  <Field icon={<Calendar className="size-4" />} label="Dates">
+                    <CalendarPopover />
+                  </Field>
+                  <Field icon={<User className="size-4" />} label="Guests">
+                    <GuestsPopover />
+                  </Field>
+                  <Field label={<span className="sr-only">Search</span>}>
+                    <Button className="h-10 w-full text-sm rounded-xl relative overflow-hidden">
+                      <span className="relative z-10">Search</span>
+                      <span className="pointer-events-none absolute inset-0 translate-x-[-120%] bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] animate-[sheen_1.8s_linear_infinite]" />
+                    </Button>
+                  </Field>
+                </div>
+
+                <div className="mt-3 overflow-hidden rounded-xl border border-white/10">
+                  <div className="flex animate-[marquee_18s_linear_infinite] whitespace-nowrap text-[11px] md:text-xs [mask-image:linear-gradient(90deg,transparent,black_10%,black_90%,transparent)]">
+                    {Array.from({ length: 16 }).map((_, i) => (
+                      <span key={i} className="px-4 py-2 text-white/80">
+                        🔥 Doha Jazz Fest • 🏨 Skyline Luxe Deal • 🎟️ Rooftop Cinema • 🎤 Live Arena Tour • 🎭 Theatre Night
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </div>
+
+        {/* keyframes */}
+        <style>{`
+          @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes sheen { 0% { transform: translateX(-120%);} 100% { transform: translateX(120%);} }
+          @media (prefers-reduced-motion: reduce) {
+            .animate-[marquee_18s_linear_infinite] { animation: none !important; }
+            .animate-[spin_36s_linear_infinite], .animate-[spin_48s_linear_infinite_reverse] { animation: none !important; }
+          }
+        `}</style>
+      </div>
+    </section>
+  );
+}
+
+/* ---------------------- Magnetic demo button with sheen -------------------- */
 function MagneticButton() {
   const x = useSpring(0, { stiffness: 200, damping: 15 });
   const y = useSpring(0, { stiffness: 200, damping: 15 });
@@ -399,23 +942,80 @@ function MagneticButton() {
   );
 }
 
-function ScrollProgress() {
-  const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, { stiffness: 140, damping: 30, restDelta: 0.001 });
+/* ------------------------------- STATS STRIP ------------------------------- */
+function CountUp({ value }: { value: number }) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: "-40% 0px" });
+  const mv = useMotionValue(0);
+  const rounded = useTransform(mv, (v) => Math.round(v).toLocaleString());
+
+  useEffect(() => {
+    if (inView) {
+      const controls = animate(mv, value, { duration: 1.2, ease: "easeOut" });
+      return () => controls.stop();
+    }
+  }, [inView, value, mv]);
+
+  return <motion.span ref={ref}>{rounded}</motion.span>;
+}
+
+function StatsStrip() {
+  const items = [
+    { icon: <Sparkles className="size-5" />, label: "Experiences booked", value: 128_432 },
+    { icon: <TimerReset className="size-5" />, label: "Avg. checkout time", value: 28 },
+    { icon: <ShieldCheck className="size-5" />, label: "Hotels partnered", value: 960 },
+    { icon: <Star className="size-5" />, label: "Avg. rating", value: 4.9 },
+  ];
   return (
-    <motion.div
-      className="fixed left-0 right-0 top-0 z-[9999] h-1 origin-left bg-gradient-to-r from-red-600 via-white/80 to-red-600"
-      style={{ scaleX }}
-    />
+    <section className="px-6 pt-10 text-white">
+      <div className="mx-auto max-w-7xl grid grid-cols-2 gap-4 md:grid-cols-4">
+        {items.map((it, i) => (
+          <div key={i} className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm flex items-center gap-3">
+            <div className="grid place-items-center rounded-xl bg-white/10 p-2">{it.icon}</div>
+            <div>
+              <div className="text-xl font-bold">
+                {it.label.includes("rating") ? (<><CountUp value={it.value} />★</>) :
+                 it.label.includes("time") ? (<><CountUp value={it.value} />s</>) :
+                 (<CountUp value={it.value} />)}
+              </div>
+              <div className="text-xs text-white/70">{it.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
-/* ───────────────────────────────────── featured list ───────────────────────────────────── */
-type HotelImage = { id?: number | string; url: string; alt?: string | null };
-type Hotel = { id: number; name: string; city: string; price: number; rating: number | null; capacity?: number; images: HotelImage[]; };
+/* -------------------------------- Featured --------------------------------- */
+type HotelImage = { id: string; url: string; alt?: string | null };
+type Hotel = { id: string; name: string; city: string; price: number; rating: number | null; images: HotelImage[]; };
 
-function Featured({ items, loading, error }: { items: Hotel[]; loading: boolean; error: string | null }) {
+function Featured() {
   const navigate = useNavigate();
+  const [items, setItems] = React.useState<Hotel[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const r = await fetch("/api/hotels", { credentials: "include" });
+        if (!r.ok) {
+          const maybeJson = await r.json().catch(() => null);
+          const msg = maybeJson?.error ?? `HTTP ${r.status}`;
+          throw new Error(msg);
+        }
+        const data: Hotel[] = await r.json();
+        setItems(data);
+      } catch (e: any) {
+        setError(e?.message || "Failed to load hotels");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   return (
     <section id="featured" className="px-6 py-16 text-white">
@@ -426,7 +1026,10 @@ function Featured({ items, loading, error }: { items: Hotel[]; loading: boolean;
         {loading && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-60 rounded-2xl bg-white/5 animate-pulse border border-white/10" />
+              <div
+                key={i}
+                className="h-60 rounded-2xl bg-white/5 animate-pulse border border-white/10"
+              />
             ))}
           </div>
         )}
@@ -492,117 +1095,84 @@ function Featured({ items, loading, error }: { items: Hotel[]; loading: boolean;
     </section>
   );
 }
+/* --------------------------------- Events ---------------------------------- */
+function EventStrip() {
+  const ev = [
+    { title: "Arena Night: The Tour", sub: "Doha • Aug 28", img: "/images/event_arena.jpeg" },
+    { title: "Old Town Theatre",      sub: "Matinee • Daily", img: "/images/event_theatre.avif" },
+    { title: "Rooftop Cinema",        sub: "Fridays 8pm",     img: "/images/event_rooftop.jpeg" },
+  ];
 
-/* ───────────────────────────────────────── hero + page ───────────────────────────────────────── */
-function HeroSearch({
-  destination,
-  setDestination,
-  guests,
-  setGuests,
-  onSearch,
-}: {
-  destination: string;
-  setDestination: (v: string) => void;
-  guests: Guests;
-  setGuests: (v: Guests) => void;
-  onSearch: () => void;
-}) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
-        <div className="flex flex-col gap-2 rounded-2xl p-2 text-white/90">
-          <div className="flex items-center gap-2 text-sm opacity-80 min-h-[20px]">
-            <span className="grid place-content-center rounded-md border border-white/15 bg-white/10 p-1">
-              <MapPin className="size-4" />
-            </span>
-            <span>Destination</span>
-          </div>
-          <DestinationPicker value={destination} onChange={setDestination} />
+    <section className="px-6 pb-24 text-white">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6">
+          <h2 className="text-3xl font-bold">Tonight in the City</h2>
+          <p className="text-white/70">Curated events with motion-blur slides.</p>
         </div>
-
-        <div className="flex flex-col gap-2 rounded-2xl p-2 text-white/90">
-          <div className="flex items-center gap-2 text-sm opacity-80 min-h-[20px]">
-            <span className="grid place-content-center rounded-md border border-white/15 bg-white/10 p-1">
-              <Calendar className="size-4" />
-            </span>
-            <span>Dates</span>
-          </div>
-          <PillInput readOnly placeholder="Select dates" />
-        </div>
-
-        <div className="flex flex-col gap-2 rounded-2xl p-2 text-white/90">
-          <div className="flex items-center gap-2 text-sm opacity-80 min-h-[20px]">
-            <span className="grid place-content-center rounded-md border border-white/15 bg-white/10 p-1">
-              <User className="size-4" />
-            </span>
-            <span>Guests</span>
-          </div>
-          <GuestsPopover value={guests} onChange={setGuests} />
-        </div>
-
-        <div className="flex flex-col gap-2 rounded-2xl p-2 text-white/90">
-          <span className="sr-only">Search</span>
-          <Button className="h-10 w-full text-sm rounded-xl relative overflow-hidden" onClick={onSearch}>
-            <span className="relative z-10">Search</span>
-            <span className="pointer-events-none absolute inset-0 translate-x-[-120%] bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] animate-[sheen_1.8s_linear_infinite]" />
-          </Button>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          {ev.map((e) => (
+            <TiltCard key={e.title}>
+              <motion.a
+                href="#"
+                className="group relative block overflow-hidden rounded-3xl border border-white/10 bg-white/5"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+              >
+                <motion.img
+                  src={e.img}
+                  onError={(img) => { (img.currentTarget as HTMLImageElement).src = "/images/fallback.jpg"; }}
+                  alt={e.title}
+                  className="h-60 w-full object-cover"
+                  whileHover={{ scale: 1.1, filter: "blur(1px)" }}
+                  transition={{ duration: 0.6 }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/0" />
+                <div className="absolute inset-x-4 bottom-4">
+                  <div className="text-sm text-white/70">{e.sub}</div>
+                  <div className="text-xl font-semibold">{e.title}</div>
+                </div>
+              </motion.a>
+            </TiltCard>
+          ))}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
+/* ------------------------------- PAGE -------------------------------------- */
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
 
-  const [destination, setDestination] = useState("Doha, Qatar"); // default sample
-  const [guests, setGuests] = useState<Guests>({ adults: 2, kids: 0 });
-
-  const [items, setItems] = useState<Hotel[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const totalGuests = guests.adults + guests.kids;
-
-  const fetchHotels = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      if (destination.trim()) params.set("city", destination);
-      if (totalGuests > 0) params.set("guests", String(totalGuests));
-
-      const r = await fetch(`/api/hotels?${params.toString()}`, { credentials: "include" });
-      if (!r.ok) {
-        const j = await r.json().catch(() => null);
-        throw new Error(j?.error || `HTTP ${r.status}`);
-      }
-      const data = (await r.json()) as Hotel[];
-      setItems(data);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load hotels");
-    } finally {
-      setLoading(false);
-    }
-  }, [destination, totalGuests]);
-
+  // Stop any videos from earlier pages
   useEffect(() => {
-    // initial load (no filters or with defaults)
-    fetchHotels();
-  }, []); // eslint-disable-line
+    document.querySelectorAll<HTMLVideoElement>("video").forEach((v) => {
+      v.pause();
+      v.removeAttribute("src");
+      try { v.load(); } catch {}
+    });
+  }, []);
+
+  // First name chip (from localStorage)
+  
 
   const logout = () => {
     try {
       localStorage.removeItem("rr_demo_user");
       localStorage.removeItem("rr_guest");
+      // keep rr_name so greeting can be used after returning? Clear if you want:
+      // localStorage.removeItem("rr_name");
     } catch {}
-    navigate("/"); // your auth gate will send to /login
+    navigate("/");
   };
 
-  /* simple hero top (trimmed to the essentials for this change) */
   return (
     <div className="min-h-screen w-full bg-black font-sans">
       <ScrollProgress />
+
+    
 
       <button
         onClick={logout}
@@ -612,27 +1182,13 @@ export default function RedRouteLandingUltra() {
         <LogOut className="size-4" /> Logout
       </button>
 
-      {/* HERO (only the search block shown for brevity) */}
-      <section className="relative text-white isolate bg-black">
-        <div className="relative h-[32vh] md:h-[28vh] w-full overflow-visible">
-          <div className="absolute inset-0 grid place-items-center px-4">
-            <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-visible z-30">
-              <div className="space-y-4">
-                <div className="text-3xl md:text-4xl font-black">Find your perfect stay</div>
-                <HeroSearch
-                  destination={destination}
-                  setDestination={setDestination}
-                  guests={guests}
-                  setGuests={setGuests}
-                  onSearch={fetchHotels}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <Featured items={items} loading={loading} error={error} />
+      <Hero />
+      <StatsStrip />
+      <Featured />
+      <KenBurnsShowcase />
+      <EventStrip />
+      <Testimonials />
+      <SiteFooter />
 
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
