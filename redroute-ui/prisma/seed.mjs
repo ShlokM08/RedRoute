@@ -3,47 +3,172 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  // wipe + seed (safe for local/dev; remove deletes if you want)
+  // Wipe (dev-safe). Remove these deletes if you want to preserve data.
   await prisma.favorite.deleteMany();
   await prisma.booking.deleteMany();
   await prisma.hotelImage.deleteMany();
   await prisma.hotel.deleteMany();
-
+  const sameImage = {
+    create: [{ url: "/images/featured_hotel.avif", alt: "Skyline Luxe" }],
+  };
+  // 1) Skyline Luxe — capacity 2
   await prisma.hotel.create({
     data: {
       name: "Skyline Luxe Hotel",
       city: "Doha",
+      country: "Qatar",
       price: 189,
+      capacity: 2,
       rating: 4.9,
       description: "Glass-and-steel views with an infinity pool on the 30th.",
       images: {
-        create: [
-          { url: "/images/featured_hotel.avif", alt: "Skyline Luxe" }
-        ]
-      }
-    }//change
+        create: [{ url: "/images/featured_hotel.avif", alt: "Skyline Luxe" }],
+      },
+    },
   });
 
+  // 2) Coastal Escape — capacity 2
   await prisma.hotel.create({
     data: {
       name: "Coastal Escape Villa",
       city: "Bali",
+      country: "Indonesia",
       price: 259,
+      capacity: 2,
       rating: 4.8,
       description: "Private beach access, sunset deck and outdoor cinema.",
-      images: { create: [{ url: "/images/featured_villa.jpeg", alt: "Coastal Villa" }] }
-    }
+      images: {
+        create: [{ url: "/images/featured_villa.jpeg", alt: "Coastal Villa" }],
+      },
+    },
   });
 
+  // 3) Downtown Loft — capacity 2
   await prisma.hotel.create({
     data: {
       name: "Downtown Creative Loft",
       city: "Barcelona",
+      country: "Spain",
       price: 139,
+      capacity: 2,
       rating: 4.7,
       description: "Industrial-chic loft with skyline terrace.",
-      images: { create: [{ url: "/images/featured_loft.avif", alt: "Loft" }] }
-    }
+      images: {
+        create: [{ url: "/images/featured_loft.avif", alt: "Loft" }],
+      },
+    },
+  });
+
+  // 4) Marina View — capacity 4
+  await prisma.hotel.create({
+    data: {
+      name: "Marina View Suites",
+      city: "Dubai",
+      country: "UAE",
+      price: 210,
+      capacity: 4,
+      rating: 4.6,
+      description: "Harborfront suites with sweeping marina panoramas.",
+      images: sameImage,
+    },
+  });
+
+  // 5) Left Bank Boutique — capacity 2
+  await prisma.hotel.create({
+    data: {
+      name: "Left Bank Boutique",
+      city: "Paris",
+      country: "France",
+      price: 240,
+      capacity: 2,
+      rating: 4.8,
+      description: "Haussmann charm steps from the Seine and cafés.",
+      images: sameImage,
+    },
+  });
+
+  // 6) Shinjuku Sky Pods — capacity 2
+  await prisma.hotel.create({
+    data: {
+      name: "Shinjuku Sky Pods",
+      city: "Tokyo",
+      country: "Japan",
+      price: 175,
+      capacity: 2,
+      rating: 4.5,
+      description: "Futuristic pods with neon views in Shinjuku.",
+      images: sameImage,
+    },
+  });
+
+  // 7) Bosphorus Heritage — capacity 3
+  await prisma.hotel.create({
+    data: {
+      name: "Bosphorus Heritage Hotel",
+      city: "Istanbul",
+      country: "Türkiye",
+      price: 160,
+      capacity: 3,
+      rating: 4.6,
+      description: "Ottoman-era details with modern amenities by the strait.",
+      images: sameImage,
+    },
+  });
+
+  // 8) Midtown Signature — capacity 5
+  await prisma.hotel.create({
+    data: {
+      name: "Midtown Signature",
+      city: "New York",
+      country: "USA",
+      price: 320,
+      capacity: 5,
+      rating: 4.7,
+      description: "Steps from Broadway with skyline lounge.",
+      images: sameImage,
+    },
+  });
+
+  // 9) Trastevere Courtyard Inn — capacity 3
+  await prisma.hotel.create({
+    data: {
+      name: "Trastevere Courtyard Inn",
+      city: "Rome",
+      country: "Italy",
+      price: 180,
+      capacity: 3,
+      rating: 4.4,
+      description: "Sun-drenched courtyard in the heart of Trastevere.",
+      images: sameImage,
+    },
+  });
+
+  // 10) Riverside Opera House Stay — capacity 4
+  await prisma.hotel.create({
+    data: {
+      name: "Riverside Opera House Stay",
+      city: "London",
+      country: "United Kingdom",
+      price: 290,
+      capacity: 4,
+      rating: 4.7,
+      description: "River views near theatres and markets.",
+      images: sameImage,
+    },
+  });
+
+  // 11) Alpine Panorama Lodge — capacity 6
+  await prisma.hotel.create({
+    data: {
+      name: "Alpine Panorama Lodge",
+      city: "Zurich",
+      country: "Switzerland",
+      price: 230,
+      capacity: 6,
+      rating: 4.6,
+      description: "Lakeside alpine lodge with spa and mountain views.",
+      images: sameImage,
+    },
   });
 }
 

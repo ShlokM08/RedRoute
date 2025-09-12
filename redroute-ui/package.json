@@ -6,6 +6,9 @@
   "engines": {
     "node": ">=18.18.0"
   },
+  "prisma": {
+    "seed": "node prisma/seed.mjs"
+  },
   "scripts": {
     "// dev": "Run Vite client and API together",
     "dev": "concurrently -n APP,API -c blue,magenta \"vite\" \"tsx watch server/index.ts\"",
@@ -22,6 +25,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
     "seed": "node --env-file=.env prisma/seed.mjs",
     "// lint": "eslint (optional)",
     "lint": "eslint .",

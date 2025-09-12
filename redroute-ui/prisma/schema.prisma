@@ -23,15 +23,18 @@ model User {
 }
 
 model Hotel {
-  id        Int          @id @default(autoincrement())
-  name      String
-  city      String
-  price     Int
-  rating    Float?
-  createdAt DateTime     @default(now())
-  images    HotelImage[]
-  bookings  Booking[]
-  favorites Favorite[]
+  id          Int          @id @default(autoincrement())
+  name        String
+  city        String
+  country     String        @default("")   // ⬅️ NEW
+  price       Int
+  capacity    Int           @default(2)    // ⬅️ NEW
+  rating      Float?
+  description String?                      // ⬅️ NEW (your seed uses it)
+  createdAt   DateTime     @default(now())
+  images      HotelImage[]
+  bookings    Booking[]
+  favorites   Favorite[]
 }
 
 model HotelImage {
