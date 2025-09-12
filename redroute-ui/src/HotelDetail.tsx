@@ -163,8 +163,12 @@ export default function HotelDetail() {
             <div>
               <h2 className="text-2xl font-semibold mb-2">Overview</h2>
               <p className="text-white/80">
-                A modern stay in {hotel.city}. Rated {hotel.rating ?? "—"}★ and starting at ${hotel.price}/night.
-                Perfect for a cinematic escape with RedRoute’s lightning checkout.
+                A modern stay in {hotel.city}, rated {hotel.rating ?? "—"}★ and starting at ${hotel.price}/night, awaits travelers looking for more than just a room. Perfect for a cinematic escape with RedRoute’s lightning-fast checkout, this hotel wraps contemporary design around classic comfort to create an unforgettable experience.
+
+Step into spacious, light-filled rooms featuring plush bedding, designer furnishings, and tech-forward touches like smart climate control and high-speed Wi-Fi. Many rooms open to sweeping city views or private balconies—ideal for morning coffee or sunset cocktails. Indulge in a rooftop pool that glows after dark, an inviting spa for mid-journey rejuvenation, and a vibrant lounge where local music and signature drinks set the tone for the night.
+
+Dining is a delight: savor globally inspired cuisine at the on-site restaurant or grab artisanal pastries and coffee from the café before heading out. Located in the heart of {hotel.city}, you’ll be steps from cultural landmarks, buzzing nightlife, and hidden gems known only to locals. Whether you’re planning a romantic weekend, an adventure with friends, or a solo city break, the combination of attentive service, world-class amenities, 
+and effortless RedRoute booking makes this hotel the perfect base for memories that linger long after checkout.
               </p>
             </div>
           </div>
