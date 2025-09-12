@@ -29,8 +29,8 @@ function Logout() {
 export default function App() {
   useEffect(() => {
     if (import.meta.env.DEV) {
-      // Uncomment to reset local storage during dev
-      // localStorage.clear();
+      // Uncomment to clear session during dev:
+      // localStorage.removeItem("rr_session_ts");
     }
   }, []);
 
@@ -39,9 +39,11 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<SignIn />} />
 
+        {/* Allow hotel detail without auth to confirm issue */}
+        <Route path="/hotels/:id" element={<HotelDetail />} />
+
         <Route element={<RequireAuth />}>
           <Route path="/home" element={<RedRouteLandingUltra />} />
-          <Route path="/hotels/:id" element={<HotelDetail />} />
           <Route
             path="/square"
             element={

@@ -1,17 +1,45 @@
 // src/session.ts
-// Persist session across reloads using localStorage
+const KEY_AUTH = "rr_demo_user";
+const KEY_GUEST = "rr_guest";
+const KEY_TS = "rr_session_ts";
+const MAX_AGE_MS = 1000 * 60 * 60 * 24; // 24h
 
-const SESSION_KEY = "rr_session_ts";
-
-export function hasValidSession(): boolean {
-  const ts = localStorage.getItem(SESSION_KEY);
-  return Boolean(ts);
-}
-
-export function setSession() {
-  localStorage.setItem(SESSION_KEY, Date.now().toString());
+export function setSession(type: "auth" | "guest") {
+  try {
+    if (type === "auth") {
+      localStorage.setItem(KEY_AUTH, "auth");
+      localStorage.removeItem(KEY_GUEST);
+    } else {
+      localStorage.setItem(KEY_GUEST, "guest");
+      localStorage.removeItem(KEY_AUTH);
+    }
+    localStorage.setItem(KEY_TS, String(Date.now()));
+  } catch {}
 }
 
 export function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
+  try {
+    localStorage.removeItem(KEY_AUTH);
+    localStorage.removeItem(KEY_GUEST);
+    localStorage.removeItem(KEY_TS);
+    localStorage.removeItem("rr_name");
+  } catch {}
+}
+
+export function hasValidSession() {
+  try {
+    const val = localStorage.getItem(KEY_AUTH) || localStorage.getItem(KEY_GUEST);
+    if (!val) return false;
+
+    const tsRaw = localStorage.getItem(KEY_TS);
+    const ts = tsRaw ? Number(tsRaw) : 0;
+
+    if (!ts || Date.now() - ts > MAX_AGE_MS) {
+      clearSession();
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
