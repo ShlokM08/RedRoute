@@ -39,7 +39,7 @@ export default function HotelDetail() {
       }
 
       try {
-        const r = await fetch(`/api/hotels/${hotelId}`, { credentials: "include" });
+        const r = await fetch(`/api/hotels/${id}`, { credentials: "include" });
         if (!r.ok) {
           const j = await r.json().catch(() => null);
           throw new Error(j?.error || `Failed to load (HTTP ${r.status})`);
