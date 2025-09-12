@@ -996,6 +996,7 @@ function Featured() {
   const [items, setItems] = React.useState<Hotel[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [searchCity, setSearchCity] = React.useState(""); // 🔍 added
 
   React.useEffect(() => {
     (async () => {
@@ -1017,11 +1018,29 @@ function Featured() {
     })();
   }, []);
 
+  // Filter by city
+  const filteredItems = React.useMemo(() => {
+    if (!searchCity.trim()) return items;
+    const q = searchCity.trim().toLowerCase();
+    return items.filter((h) => h.city.toLowerCase().includes(q));
+  }, [items, searchCity]);
+
   return (
     <section id="featured" className="px-6 py-16 text-white">
       <div className="mx-auto max-w-7xl">
         <h2 className="text-3xl font-bold">Featured Stays</h2>
-        <p className="text-white/70 mb-6">Cinematic tilt, parallax, and glow.</p>
+        <p className="text-white/70 mb-4">Cinematic tilt, parallax, and glow.</p>
+
+        {/* Search field */}
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Filter by city..."
+            value={searchCity}
+            onChange={(e) => setSearchCity(e.target.value)}
+            className="w-full max-w-sm rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-red-600/50"
+          />
+        </div>
 
         {loading && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -1040,9 +1059,13 @@ function Featured() {
           </div>
         )}
 
-        {!loading && !error && (
+        {!loading && !error && filteredItems.length === 0 && (
+          <div className="mt-2 text-white/70">No hotels match that city.</div>
+        )}
+
+        {!loading && !error && filteredItems.length > 0 && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            {items.map((h) => {
+            {filteredItems.map((h) => {
               const img = h.images?.[0]?.url || "/images/featured_hotel.avif";
               return (
                 <article
@@ -1095,6 +1118,7 @@ function Featured() {
     </section>
   );
 }
+
 /* --------------------------------- Events ---------------------------------- */
 function EventStrip() {
   const ev = [
