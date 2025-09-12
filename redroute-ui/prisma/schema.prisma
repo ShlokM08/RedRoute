@@ -1,6 +1,6 @@
 generator client {
   provider      = "prisma-client-js"
-  // "native" for your dev box; other targets for Vercel/Render
+  // Needed for Vercel. "native" = your dev box, "debian-openssl-3.0.x" = Vercel.
   binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
 }
 
@@ -23,26 +23,23 @@ model User {
 }
 
 model Hotel {
-  id          Int          @id @default(autoincrement())
-  name        String
-  city        String
-  country     String       // NEW
-  capacity    Int          // NEW - max total guests supported
-  price       Int
-  rating      Float?
-  description String?      // optional but handy for the detail page
-  createdAt   DateTime     @default(now())
-  images      HotelImage[]
-  bookings    Booking[]
-  favorites   Favorite[]
+  id        Int          @id @default(autoincrement())
+  name      String
+  city      String
+  price     Int
+  rating    Float?
+  createdAt DateTime     @default(now())
+  images    HotelImage[]
+  bookings  Booking[]
+  favorites Favorite[]
 }
 
 model HotelImage {
-  id      Int    @id @default(autoincrement())
+  id      Int     @id @default(autoincrement())
   url     String
   alt     String?
   hotelId Int
-  hotel   Hotel  @relation(fields: [hotelId], references: [id])
+  hotel   Hotel   @relation(fields: [hotelId], references: [id])
 }
 
 model Booking {
