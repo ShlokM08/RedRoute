@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import prisma from "../_lib/prisma.js"; // reuse shared client
+export const config = { runtime: "nodejs18.x" };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const idParam = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
