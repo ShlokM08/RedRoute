@@ -17,7 +17,6 @@ export default function HotelDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // ✅ Parse and validate the id from the URL
   const hotelId = useMemo(() => {
     const n = Number(id);
     return Number.isFinite(n) ? n : null;
@@ -38,12 +37,10 @@ export default function HotelDetail() {
         return;
       }
 
-      const url = `/api/hotels/${hotelId}`; // ✅ use hotelId here
-      console.log("Fetching hotel from:", url);
-
       try {
+        const url = `/api/hotels/${hotelId}`;
+        console.log("Fetching hotel from:", url);
         const r = await fetch(url, { credentials: "include" });
-        console.log("Response content-type:", r.headers.get("content-type"));
         if (!r.ok) {
           const j = await r.json().catch(() => null);
           throw new Error(j?.error || `Failed to load (HTTP ${r.status})`);
@@ -63,7 +60,6 @@ export default function HotelDetail() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Back button */}
       <button
         onClick={() => navigate(-1)}
         className="fixed top-5 left-5 z-50 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
