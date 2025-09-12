@@ -12,5 +12,6 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
     return res.status(200).json(hotels);
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || 'Failed to load hotels' });
+    //dd
   }
 }
