@@ -3,7 +3,6 @@
   "version": 2,
   "functions": {
     "api/**/*.ts": {
-      "runtime": "nodejs",
       "memory": 1024,
       "maxDuration": 10
     }
