@@ -11,7 +11,6 @@ type Hotel = {
   price: number;
   rating: number | null;
   images: HotelImage[];
-  // add any extra fields you seeded later (amenities, description, etc.)
 };
 
 export default function HotelDetail() {
@@ -38,8 +37,12 @@ export default function HotelDetail() {
         return;
       }
 
+      const url = `/api/hotels/${hotelId}`;
+      console.log("Fetching hotel from:", url);
+
       try {
-        const r = await fetch(`/api/hotels/${id}`, { credentials: "include" });
+        const r = await fetch(url, { credentials: "include" });
+        console.log("Response content-type:", r.headers.get("content-type"));
         if (!r.ok) {
           const j = await r.json().catch(() => null);
           throw new Error(j?.error || `Failed to load (HTTP ${r.status})`);
@@ -47,6 +50,7 @@ export default function HotelDetail() {
         const data: Hotel = await r.json();
         setHotel(data);
       } catch (e: any) {
+        console.error("Fetch failed:", e);
         setErr(e?.message || "Could not fetch hotel details.");
       } finally {
         setLoading(false);
@@ -58,7 +62,7 @@ export default function HotelDetail() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Back */}
+      {/* Back button */}
       <button
         onClick={() => navigate(-1)}
         className="fixed top-5 left-5 z-50 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
@@ -66,8 +70,8 @@ export default function HotelDetail() {
         <ChevronLeft className="h-4 w-4" /> Back
       </button>
 
-      {/* Skeleton / Error / Content */}
-      {loading ? (
+      {/* Loading skeleton */}
+      {loading && (
         <div className="p-6 max-w-5xl mx-auto">
           <div className="h-[50vh] w-full rounded-3xl bg-white/5 border border-white/10 animate-pulse" />
           <div className="mt-8 h-8 w-1/3 bg-white/5 rounded animate-pulse" />
@@ -78,7 +82,10 @@ export default function HotelDetail() {
             ))}
           </div>
         </div>
-      ) : err ? (
+      )}
+
+      {/* Error state */}
+      {!loading && err && (
         <div className="max-w-3xl mx-auto p-6">
           <div className="rounded-2xl border border-white/15 bg-white/5 p-6">
             <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
@@ -91,28 +98,33 @@ export default function HotelDetail() {
             </button>
           </div>
         </div>
-      ) : (
+      )}
+
+      {/* Content */}
+      {!loading && hotel && !err && (
         <>
-          {/* Hero */}
+          {/* Hero image */}
           <div className="relative h-[50vh] w-full overflow-hidden">
             <motion.img
               src={mainImg}
-              alt={hotel!.name}
+              alt={hotel.name}
               className="h-full w-full object-cover"
               initial={{ scale: 1.08 }}
               animate={{ scale: 1 }}
               transition={{ duration: 1.1, ease: "easeOut" }}
-              onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg"; }}
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg";
+              }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
             <div className="absolute bottom-6 left-6">
-              <h1 className="text-4xl font-bold">{hotel!.name}</h1>
+              <h1 className="text-4xl font-bold">{hotel.name}</h1>
               <div className="mt-2 flex items-center gap-4 text-white/85">
                 <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-4 w-4" /> {hotel!.city}
+                  <MapPin className="h-4 w-4" /> {hotel.city}
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <Star className="h-4 w-4" /> {hotel!.rating ?? "—"}
+                  <Star className="h-4 w-4" /> {hotel.rating ?? "—"}
                 </span>
               </div>
             </div>
@@ -123,7 +135,7 @@ export default function HotelDetail() {
             {/* Price + reserve */}
             <div className="flex items-center justify-between border-b border-white/10 pb-6">
               <div>
-                <div className="text-3xl font-bold">${hotel!.price}</div>
+                <div className="text-3xl font-bold">${hotel.price}</div>
                 <div className="text-sm text-white/60">per night</div>
               </div>
               <button className="rounded-xl bg-[#E50914] px-6 py-3 font-semibold shadow-[0_10px_30px_rgba(229,9,20,0.45)] hover:brightness-110">
@@ -132,29 +144,31 @@ export default function HotelDetail() {
             </div>
 
             {/* Gallery */}
-            {hotel!.images?.length > 1 && (
+            {hotel.images?.length > 1 && (
               <div>
                 <h2 className="text-2xl font-semibold mb-4">Gallery</h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {hotel!.images.slice(1).map((img, i) => (
+                  {hotel.images.slice(1).map((img, i) => (
                     <motion.img
                       key={i}
                       src={img.url}
-                      alt={img.alt ?? hotel!.name}
+                      alt={img.alt ?? hotel.name}
                       className="rounded-xl object-cover w-full h-48"
                       whileHover={{ scale: 1.04 }}
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg"; }}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg";
+                      }}
                     />
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Overview (replace with seeded fields later) */}
+            {/* Overview */}
             <div>
               <h2 className="text-2xl font-semibold mb-2">Overview</h2>
               <p className="text-white/80">
-                A modern stay in {hotel!.city}. Rated {hotel!.rating ?? "—"}★ and starting at ${hotel!.price}/night.
+                A modern stay in {hotel.city}. Rated {hotel.rating ?? "—"}★ and starting at ${hotel.price}/night.
                 Perfect for a cinematic escape with RedRoute’s lightning checkout.
               </p>
             </div>
