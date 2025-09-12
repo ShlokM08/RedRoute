@@ -266,18 +266,24 @@ function normalize(s: string) {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function DestinationPicker() {
-  const [query, setQuery] = useState("");
+/** MADE CONTROLLED: value = current city string, onChange(cityOnly) updates parent */
+function DestinationPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (city: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const filtered = useMemo(() => {
-    const q = normalize(query);
+    const q = normalize(value);
     if (!q) return DESTINATIONS;
     return DESTINATIONS.filter((d) => d.tokens.includes(q));
-  }, [query]);
+  }, [value]);
 
   const grouped = useMemo(() => {
     const out: Record<Destination["group"], Destination[]> = { Popular: [], Cities: [], Regions: [] };
@@ -321,7 +327,11 @@ function DestinationPicker() {
       if (!open) return;
       e.preventDefault();
       const sel = filtered.find((d) => d.id === active) ?? filtered[0];
-      if (sel) { setQuery(sel.label); setOpen(false); }
+      if (sel) {
+        const cityOnly = sel.label.split(",")[0];
+        onChange(cityOnly);
+        setOpen(false);
+      }
     } else if (e.key === "Escape") {
       if (open) { e.preventDefault(); setOpen(false); }
     }
@@ -334,7 +344,8 @@ function DestinationPicker() {
   }
 
   function select(d: Destination) {
-    setQuery(d.label);
+    const cityOnly = d.label.split(",")[0];
+    onChange(cityOnly);
     setOpen(false);
   }
 
@@ -346,8 +357,8 @@ function DestinationPicker() {
         aria-controls="destination-listbox"
         aria-activedescendant={active ? `dest-${active}` : undefined}
         placeholder="Where to?"
-        value={query}
-        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
         autoComplete="off"
@@ -376,7 +387,7 @@ function DestinationPicker() {
                   </div>
                   {items.map((d) => {
                     const isActive = active === d.id;
-                    const isSelected = normalize(query) === normalize(d.label);
+                    const isSelected = normalize(value) === normalize(d.label.split(",")[0]);
                     return (
                       <button
                         type="button"
@@ -559,6 +570,7 @@ function CalendarPopover() {
   const popRef = useRef<HTMLDivElement | null>(null);
 
   const now = new Date();
+  thead: ;
   const [viewY, setViewY] = useState(now.getFullYear());
   const [viewM, setViewM] = useState(now.getMonth());
 
@@ -618,7 +630,6 @@ function CalendarPopover() {
 
   return (
     <div ref={anchorRef} className="relative">
-      {/* Use the same pill as Destination so styling/height match */}
       <PillInput
         readOnly
         value={label}
@@ -765,9 +776,13 @@ function SiteFooter() {
 
 /* ----------------------------- HERO SECTION -------------------------------- */
 /** NOTE: Black background only (no video). */
-/* ----------------------------- HERO SECTION -------------------------------- */
-/** NOTE: Black background only (no video). */
-function Hero() {
+function Hero({
+  city,
+  setCity,
+}: {
+  city: string;
+  setCity: (c: string) => void;
+}) {
   // cursor glow & parallax (kept)
   const mx = useMotionValue(0.5);
   const my = useMotionValue(0.5);
@@ -777,7 +792,7 @@ function Hero() {
   const glowX = useTransform(mx, (v) => `${v * 100}%`);
   const glowY = useTransform(my, (v) => `${v * 100}%`);
 
-  // ---- Personalized headline: try localStorage → API /me → email fallback
+  // Personalized headline
   const [firstName, setFirstName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -788,7 +803,6 @@ function Hero() {
     }
 
     (async () => {
-      // Try your API if present
       try {
         const r = await fetch("/api/auth/me", { credentials: "include" });
         if (r.ok) {
@@ -801,11 +815,7 @@ function Hero() {
             return;
           }
         }
-      } catch {
-        // ignore — we’ll try the email fallback below
-      }
-
-      // Fallback: derive a name from cached email if you store it
+      } catch {}
       const email = (localStorage.getItem("rr_email") || "").trim();
       if (email.includes("@")) {
         const guess = email.split("@")[0];
@@ -814,7 +824,6 @@ function Hero() {
     })();
   }, []);
 
-  // Keep the name glued to "RedRoute" on the same line using NBSP
   const headline = `Welcome to RedRoute${firstName ? `,\u00A0${firstName}` : ""}`;
 
   function onMove(e: React.MouseEvent<HTMLDivElement>) {
@@ -823,13 +832,15 @@ function Hero() {
     my.set((e.clientY - r.top) / r.height);
   }
 
+  const scrollToFeatured = () => {
+    const el = document.getElementById("featured");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
     <section className="relative text-white z-40 isolate bg-black">
-      {/* OUTER BANNER — black canvas with subtle gradients (no video) */}
       <div className="relative h-[55vh] md:h-[48vh] w-full overflow-visible">
-        {/* soft overlay gradients */}
         <div className="absolute inset-0 -z-10 [background:radial-gradient(900px_circle_at_20%_10%,rgba(229,9,20,0.20),transparent_60%),radial-gradient(900px_circle_at_85%_15%,rgba(255,107,107,0.16),transparent_65%)]" />
-        {/* rotating beams */}
         <div className="pointer-events-none absolute -left-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-25 mix-blend-screen">
           <div className="h-full w-full animate-[spin_36s_linear_infinite] [background:conic-gradient(from_0deg_at_50%_50%,rgba(229,9,20,0.28),transparent_30%,rgba(255,255,255,0.14),transparent_60%,rgba(229,9,20,0.22),transparent_90%)]" />
         </div>
@@ -837,17 +848,14 @@ function Hero() {
           <div className="h-full w-full animate-[spin_48s_linear_infinite_reverse] [background:conic-gradient(from_140deg_at_50%_50%,rgba(255,255,255,0.12),transparent_25%,rgba(229,9,20,0.22),transparent_65%,rgba(255,255,255,0.12),transparent_95%)]" />
         </div>
 
-        {/* INNER BANNER (glass) */}
         <div className="absolute inset-0 grid place-items-center px-4" onMouseMove={onMove}>
           <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-visible z-30">
-            {/* cursor glow */}
             <motion.div
               className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
               style={{ left: glowX, top: glowY, translateX: "-50%", translateY: "-50%" }}
             />
 
             <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
-              {/* LEFT: headline + actions */}
               <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
                 <Kinetic text={headline} className="text-4xl md:text-6xl" />
                 <p className="max-w-xl text-sm md:text-base text-white/85">
@@ -863,11 +871,11 @@ function Hero() {
                 </div>
               </motion.div>
 
-              {/* RIGHT: compact search */}
+              {/* RIGHT: compact search with controlled destination */}
               <motion.div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur" style={{ transform: pPanel }}>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
                   <Field icon={<MapPin className="size-4" />} label="Destination">
-                    <DestinationPicker />
+                    <DestinationPicker value={city} onChange={setCity} />
                   </Field>
                   <Field icon={<Calendar className="size-4" />} label="Dates">
                     <CalendarPopover />
@@ -876,7 +884,10 @@ function Hero() {
                     <GuestsPopover />
                   </Field>
                   <Field label={<span className="sr-only">Search</span>}>
-                    <Button className="h-10 w-full text-sm rounded-xl relative overflow-hidden">
+                    <Button
+                      className="h-10 w-full text-sm rounded-xl relative overflow-hidden"
+                      onClick={scrollToFeatured}
+                    >
                       <span className="relative z-10">Search</span>
                       <span className="pointer-events-none absolute inset-0 translate-x-[-120%] bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] animate-[sheen_1.8s_linear_infinite]" />
                     </Button>
@@ -897,7 +908,6 @@ function Hero() {
           </div>
         </div>
 
-        {/* keyframes */}
         <style>{`
           @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
           @keyframes spin { to { transform: rotate(360deg); } }
@@ -991,12 +1001,11 @@ function StatsStrip() {
 type HotelImage = { id: string; url: string; alt?: string | null };
 type Hotel = { id: string; name: string; city: string; price: number; rating: number | null; images: HotelImage[]; };
 
-function Featured() {
+function Featured({ cityFilter }: { cityFilter: string }) {
   const navigate = useNavigate();
   const [items, setItems] = React.useState<Hotel[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [searchCity, setSearchCity] = React.useState(""); // 🔍 added
 
   React.useEffect(() => {
     (async () => {
@@ -1018,29 +1027,17 @@ function Featured() {
     })();
   }, []);
 
-  // Filter by city
-  const filteredItems = React.useMemo(() => {
-    if (!searchCity.trim()) return items;
-    const q = searchCity.trim().toLowerCase();
-    return items.filter((h) => h.city.toLowerCase().includes(q));
-  }, [items, searchCity]);
+  const filtered = useMemo(() => {
+    const q = cityFilter.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((h) => h.city?.toLowerCase().includes(q));
+  }, [items, cityFilter]);
 
   return (
     <section id="featured" className="px-6 py-16 text-white">
       <div className="mx-auto max-w-7xl">
         <h2 className="text-3xl font-bold">Featured Stays</h2>
-        <p className="text-white/70 mb-4">Cinematic tilt, parallax, and glow.</p>
-
-        {/* Search field */}
-        <div className="mb-6">
-          <input
-            type="text"
-            placeholder="Filter by city..."
-            value={searchCity}
-            onChange={(e) => setSearchCity(e.target.value)}
-            className="w-full max-w-sm rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-red-600/50"
-          />
-        </div>
+        <p className="text-white/70 mb-6">Cinematic tilt, parallax, and glow.</p>
 
         {loading && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -1059,13 +1056,9 @@ function Featured() {
           </div>
         )}
 
-        {!loading && !error && filteredItems.length === 0 && (
-          <div className="mt-2 text-white/70">No hotels match that city.</div>
-        )}
-
-        {!loading && !error && filteredItems.length > 0 && (
+        {!loading && !error && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            {filteredItems.map((h) => {
+            {filtered.map((h) => {
               const img = h.images?.[0]?.url || "/images/featured_hotel.avif";
               return (
                 <article
@@ -1118,7 +1111,6 @@ function Featured() {
     </section>
   );
 }
-
 /* --------------------------------- Events ---------------------------------- */
 function EventStrip() {
   const ev = [
@@ -1179,15 +1171,13 @@ export default function RedRouteLandingUltra() {
     });
   }, []);
 
-  // First name chip (from localStorage)
-  
+  // City filter state controlled by DestinationPicker
+  const [cityFilter, setCityFilter] = useState("");
 
   const logout = () => {
     try {
       localStorage.removeItem("rr_demo_user");
       localStorage.removeItem("rr_guest");
-      // keep rr_name so greeting can be used after returning? Clear if you want:
-      // localStorage.removeItem("rr_name");
     } catch {}
     navigate("/");
   };
@@ -1195,8 +1185,6 @@ export default function RedRouteLandingUltra() {
   return (
     <div className="min-h-screen w-full bg-black font-sans">
       <ScrollProgress />
-
-    
 
       <button
         onClick={logout}
@@ -1206,9 +1194,11 @@ export default function RedRouteLandingUltra() {
         <LogOut className="size-4" /> Logout
       </button>
 
-      <Hero />
+      {/* Pass city filter controls into Hero */}
+      <Hero city={cityFilter} setCity={setCityFilter} />
       <StatsStrip />
-      <Featured />
+      {/* Featured renders with filtering by city */}
+      <Featured cityFilter={cityFilter} />
       <KenBurnsShowcase />
       <EventStrip />
       <Testimonials />
