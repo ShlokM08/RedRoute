@@ -1,11 +1,12 @@
+// src/HotelDetail.tsx
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, Star, MapPin } from "lucide-react";
 import { motion } from "framer-motion";
 
 type HotelImage = { url: string; alt?: string | null };
 type Hotel = {
-  id: number;
+  id: string;              // <-- string id
   name: string;
   city: string;
   price: number;
@@ -14,13 +15,8 @@ type Hotel = {
 };
 
 export default function HotelDetail() {
-  const { id } = useParams(); // react-router param
+  const { id } = useParams();           // id as string (slug)
   const navigate = useNavigate();
-
-  const hotelId = useMemo(() => {
-    const n = Number(id);
-    return Number.isFinite(n) ? n : null;
-  }, [id]);
 
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,22 +27,23 @@ export default function HotelDetail() {
       setLoading(true);
       setErr(null);
 
-      if (hotelId == null) {
+      if (!id) {
         setErr("Invalid hotel id in URL.");
         setLoading(false);
         return;
       }
 
+      const url = `/api/hotels/${encodeURIComponent(id)}`;
+
       try {
-        const url = `/api/hotels/${hotelId}`;
         const r = await fetch(url, { credentials: "include" });
 
-        // If HTML came back, routing is wrong (SPA served index.html)
+        // If the function crashed earlier, Vercel sometimes sets text/plain.
         const ct = r.headers.get("content-type") || "";
         if (!ct.includes("application/json")) {
-          const text = await r.text();
+          const text = await r.text().catch(() => "");
           throw new Error(
-            `Expected JSON but got ${ct || "unknown"}.\nFirst bytes: ${text.slice(0, 60)}`
+            `Expected JSON but got ${ct || "unknown"}. First bytes: ${text.slice(0, 60) || "n/a"}`
           );
         }
 
@@ -63,7 +60,7 @@ export default function HotelDetail() {
         setLoading(false);
       }
     })();
-  }, [hotelId]);
+  }, [id]);
 
   const mainImg = hotel?.images?.[0]?.url || "/images/featured_hotel.avif";
 
@@ -93,7 +90,7 @@ export default function HotelDetail() {
         <div className="max-w-3xl mx-auto p-6">
           <div className="rounded-2xl border border-white/15 bg-white/5 p-6">
             <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
-            <p className="text-white/80 mb-4 whitespace-pre-wrap">{err}</p>
+            <p className="text-white/80 mb-4">{err}</p>
             <button
               onClick={() => navigate("/home")}
               className="rounded-xl bg-[#E50914] px-5 py-2 font-semibold shadow-[0_10px_30px_rgba(229,9,20,0.45)] hover:brightness-110"
