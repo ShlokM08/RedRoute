@@ -17,6 +17,7 @@ export default function HotelDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  // ✅ Parse and validate the id from the URL
   const hotelId = useMemo(() => {
     const n = Number(id);
     return Number.isFinite(n) ? n : null;
@@ -37,7 +38,7 @@ export default function HotelDetail() {
         return;
       }
 
-      const url = `/api/hotels/${hotelId}`;
+      const url = `/api/hotels/${hotelId}`; // ✅ use hotelId here
       console.log("Fetching hotel from:", url);
 
       try {
@@ -70,7 +71,6 @@ export default function HotelDetail() {
         <ChevronLeft className="h-4 w-4" /> Back
       </button>
 
-      {/* Loading skeleton */}
       {loading && (
         <div className="p-6 max-w-5xl mx-auto">
           <div className="h-[50vh] w-full rounded-3xl bg-white/5 border border-white/10 animate-pulse" />
@@ -84,7 +84,6 @@ export default function HotelDetail() {
         </div>
       )}
 
-      {/* Error state */}
       {!loading && err && (
         <div className="max-w-3xl mx-auto p-6">
           <div className="rounded-2xl border border-white/15 bg-white/5 p-6">
@@ -100,10 +99,8 @@ export default function HotelDetail() {
         </div>
       )}
 
-      {/* Content */}
       {!loading && hotel && !err && (
         <>
-          {/* Hero image */}
           <div className="relative h-[50vh] w-full overflow-hidden">
             <motion.img
               src={mainImg}
@@ -130,9 +127,7 @@ export default function HotelDetail() {
             </div>
           </div>
 
-          {/* Body */}
           <div className="mx-auto max-w-5xl p-6 space-y-10">
-            {/* Price + reserve */}
             <div className="flex items-center justify-between border-b border-white/10 pb-6">
               <div>
                 <div className="text-3xl font-bold">${hotel.price}</div>
@@ -143,7 +138,6 @@ export default function HotelDetail() {
               </button>
             </div>
 
-            {/* Gallery */}
             {hotel.images?.length > 1 && (
               <div>
                 <h2 className="text-2xl font-semibold mb-4">Gallery</h2>
@@ -164,7 +158,6 @@ export default function HotelDetail() {
               </div>
             )}
 
-            {/* Overview */}
             <div>
               <h2 className="text-2xl font-semibold mb-2">Overview</h2>
               <p className="text-white/80">
