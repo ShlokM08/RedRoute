@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Star, MapPin } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -14,10 +14,9 @@ type Hotel = {
 };
 
 export default function HotelDetail() {
-  const { id } = useParams();
+  const { id } = useParams(); // react-router param
   const navigate = useNavigate();
 
-  // ✅ Parse and validate the id from the URL
   const hotelId = useMemo(() => {
     const n = Number(id);
     return Number.isFinite(n) ? n : null;
@@ -38,20 +37,27 @@ export default function HotelDetail() {
         return;
       }
 
-      const url = `/api/hotels/${hotelId}`; // ✅ use hotelId here
-      console.log("Fetching hotel from:", url);
-
       try {
+        const url = `/api/hotels/${hotelId}`;
         const r = await fetch(url, { credentials: "include" });
-        console.log("Response content-type:", r.headers.get("content-type"));
+
+        // If HTML came back, routing is wrong (SPA served index.html)
+        const ct = r.headers.get("content-type") || "";
+        if (!ct.includes("application/json")) {
+          const text = await r.text();
+          throw new Error(
+            `Expected JSON but got ${ct || "unknown"}.\nFirst bytes: ${text.slice(0, 60)}`
+          );
+        }
+
         if (!r.ok) {
           const j = await r.json().catch(() => null);
           throw new Error(j?.error || `Failed to load (HTTP ${r.status})`);
         }
+
         const data: Hotel = await r.json();
         setHotel(data);
       } catch (e: any) {
-        console.error("Fetch failed:", e);
         setErr(e?.message || "Could not fetch hotel details.");
       } finally {
         setLoading(false);
@@ -63,7 +69,6 @@ export default function HotelDetail() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Back button */}
       <button
         onClick={() => navigate(-1)}
         className="fixed top-5 left-5 z-50 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
@@ -88,7 +93,7 @@ export default function HotelDetail() {
         <div className="max-w-3xl mx-auto p-6">
           <div className="rounded-2xl border border-white/15 bg-white/5 p-6">
             <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
-            <p className="text-white/80 mb-4">{err}</p>
+            <p className="text-white/80 mb-4 whitespace-pre-wrap">{err}</p>
             <button
               onClick={() => navigate("/home")}
               className="rounded-xl bg-[#E50914] px-5 py-2 font-semibold shadow-[0_10px_30px_rgba(229,9,20,0.45)] hover:brightness-110"

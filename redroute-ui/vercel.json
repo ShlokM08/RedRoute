@@ -3,12 +3,14 @@
   "version": 2,
   "functions": {
     "api/**/*.ts": {
+      "runtime": "nodejs",
       "memory": 1024,
       "maxDuration": 10
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/api/hotels/:id", "destination": "/api/hotels/[id]" },
+    { "source": "/api/(.*)",       "destination": "/api/$1" },
+    { "source": "/(.*)",           "destination": "/index.html" }
   ]
 }
