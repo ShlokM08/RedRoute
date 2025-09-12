@@ -37,7 +37,7 @@ export default function HotelDetail() {
         return;
       }
 
-      const url = `/hotels/${hotelId}`;
+      const url = `/api/hotels/${hotelId}`;
       console.log("Fetching hotel from:", url);
 
       try {
