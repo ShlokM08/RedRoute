@@ -266,7 +266,7 @@ function normalize(s: string) {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** MADE CONTROLLED: value = current city string, onChange(cityOnly) updates parent */
+/** CONTROLLED: value = current city string, onChange(cityOnly) updates parent */
 function DestinationPicker({
   value,
   onChange,
@@ -431,18 +431,24 @@ type Guests = { adults: number; kids: number };
 const MIN_ADULTS = 1;
 const MAX_TOTAL = 10;
 
-function GuestsPopover() {
+/** CONTROLLED: value + onChange come from parent so we can filter by capacity */
+function GuestsPopover({
+  value,
+  onChange,
+}: {
+  value: Guests;
+  onChange: (g: Guests) => void;
+}) {
   const [open, setOpen] = useState(false);
-  const [g, setG] = useState<Guests>({ adults: 2, kids: 0 });
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  const total = g.adults + g.kids;
+  const total = value.adults + value.kids;
   const label = useMemo(() => {
     const parts: string[] = [];
-    parts.push(`${g.adults} ${g.adults === 1 ? "Adult" : "Adults"}`);
-    if (g.kids > 0) parts.push(`${g.kids} ${g.kids === 1 ? "Kid" : "Kids"}`);
+    parts.push(`${value.adults} ${value.adults === 1 ? "Adult" : "Adults"}`);
+    if (value.kids > 0) parts.push(`${value.kids} ${value.kids === 1 ? "Kid" : "Kids"}`);
     return parts.join(", ") || "Guests";
-  }, [g]);
+  }, [value]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -455,14 +461,24 @@ function GuestsPopover() {
   }, [open]);
 
   function bump(key: keyof Guests, delta: number) {
-    setG((prev) => {
-      let next = { ...prev, [key]: prev[key] + delta } as Guests;
-      if (key === "adults") next.adults = Math.max(MIN_ADULTS, next.adults);
-      next.kids = Math.max(0, next.kids);
-      if (next.adults + next.kids > MAX_TOTAL) return prev;
-      return next;
-    });
+  // Start from current value (controlled by parent)
+  let next: Guests = {
+    adults: value.adults,
+    kids: value.kids,
+  };
+
+  if (key === "adults") {
+    next.adults = Math.max(MIN_ADULTS, value.adults + delta);
+  } else {
+    next.kids = Math.max(0, value.kids + delta);
   }
+
+  // Respect total cap
+  if (next.adults + next.kids > MAX_TOTAL) return;
+
+  onChange(next); // pass a value, not a function
+}
+
 
   function Row({ title, note, value, onMinus, onPlus, disabledMinus, disabledPlus }: {
     title: string; note?: string; value: number;
@@ -526,25 +542,25 @@ function GuestsPopover() {
             <Row
               title="Adults"
               note="Ages 13+"
-              value={g.adults}
+              value={value.adults}
               onMinus={() => bump("adults", -1)}
               onPlus={() => bump("adults", +1)}
-              disabledMinus={g.adults <= MIN_ADULTS}
+              disabledMinus={value.adults <= MIN_ADULTS}
               disabledPlus={total >= MAX_TOTAL}
             />
             <Row
               title="Kids"
               note="Ages 2–12"
-              value={g.kids}
+              value={value.kids}
               onMinus={() => bump("kids", -1)}
               onPlus={() => bump("kids", +1)}
-              disabledMinus={g.kids <= 0}
+              disabledMinus={value.kids <= 0}
               disabledPlus={total >= MAX_TOTAL}
             />
             <div className="mt-2 flex items-center justify-between gap-2">
               <button
                 className="text-[12px] underline text-white/80 hover:text-white"
-                onClick={() => setG({ adults: 2, kids: 0 })}
+                onClick={() => onChange({ adults: 2, kids: 0 })}
               >
                 Reset
               </button>
@@ -570,7 +586,6 @@ function CalendarPopover() {
   const popRef = useRef<HTMLDivElement | null>(null);
 
   const now = new Date();
-  thead: ;
   const [viewY, setViewY] = useState(now.getFullYear());
   const [viewM, setViewM] = useState(now.getMonth());
 
@@ -779,9 +794,13 @@ function SiteFooter() {
 function Hero({
   city,
   setCity,
+  guests,
+  setGuests,
 }: {
   city: string;
   setCity: (c: string) => void;
+  guests: Guests;
+  setGuests: (g: Guests | ((prev: Guests) => Guests)) => void;
 }) {
   // cursor glow & parallax (kept)
   const mx = useMotionValue(0.5);
@@ -871,7 +890,7 @@ function Hero({
                 </div>
               </motion.div>
 
-              {/* RIGHT: compact search with controlled destination */}
+              {/* RIGHT: compact search with controlled destination & guests */}
               <motion.div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur" style={{ transform: pPanel }}>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
                   <Field icon={<MapPin className="size-4" />} label="Destination">
@@ -881,7 +900,7 @@ function Hero({
                     <CalendarPopover />
                   </Field>
                   <Field icon={<User className="size-4" />} label="Guests">
-                    <GuestsPopover />
+                    <GuestsPopover value={guests} onChange={setGuests} />
                   </Field>
                   <Field label={<span className="sr-only">Search</span>}>
                     <Button
@@ -999,9 +1018,17 @@ function StatsStrip() {
 
 /* -------------------------------- Featured --------------------------------- */
 type HotelImage = { id: string; url: string; alt?: string | null };
-type Hotel = { id: string; name: string; city: string; price: number; rating: number | null; images: HotelImage[]; };
+type Hotel = {
+  id: string;
+  name: string;
+  city: string;
+  price: number;
+  rating: number | null;
+  capacity?: number | null;   // <-- include capacity from API
+  images: HotelImage[];
+};
 
-function Featured({ cityFilter }: { cityFilter: string }) {
+function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }) {
   const navigate = useNavigate();
   const [items, setItems] = React.useState<Hotel[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -1029,15 +1056,27 @@ function Featured({ cityFilter }: { cityFilter: string }) {
 
   const filtered = useMemo(() => {
     const q = cityFilter.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((h) => h.city?.toLowerCase().includes(q));
-  }, [items, cityFilter]);
+    const totalGuests = (guests?.adults ?? 0) + (guests?.kids ?? 0);
+    return items.filter((h) => {
+      const cityOk = q ? h.city?.toLowerCase().includes(q) : true;
+      const capOk =
+        totalGuests > 0 && h.capacity != null
+          ? h.capacity >= totalGuests
+          : true; // if guests not set, don't filter by capacity
+      return cityOk && capOk;
+    });
+  }, [items, cityFilter, guests]);
 
   return (
     <section id="featured" className="px-6 py-16 text-white">
       <div className="mx-auto max-w-7xl">
         <h2 className="text-3xl font-bold">Featured Stays</h2>
-        <p className="text-white/70 mb-6">Cinematic tilt, parallax, and glow.</p>
+        <p className="text-white/70 mb-6">
+          Cinematic tilt, parallax, and glow
+          {((guests.adults + guests.kids) > 0) && ` • showing stays for ${guests.adults + guests.kids} guests`}
+          {cityFilter && ` • in ${cityFilter}`}
+          .
+        </p>
 
         {loading && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -1076,7 +1115,7 @@ function Featured({ cityFilter }: { cityFilter: string }) {
                     />
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
                     <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">
-                      {h.city}
+                      {h.city}{h.capacity != null ? ` • cap ${h.capacity}` : ""}
                     </div>
                   </div>
 
@@ -1171,8 +1210,9 @@ export default function RedRouteLandingUltra() {
     });
   }, []);
 
-  // City filter state controlled by DestinationPicker
+  // Controlled filters
   const [cityFilter, setCityFilter] = useState("");
+  const [guestsFilter, setGuestsFilter] = useState<Guests>({ adults: 2, kids: 0 });
 
   const logout = () => {
     try {
@@ -1194,11 +1234,11 @@ export default function RedRouteLandingUltra() {
         <LogOut className="size-4" /> Logout
       </button>
 
-      {/* Pass city filter controls into Hero */}
-      <Hero city={cityFilter} setCity={setCityFilter} />
+      {/* Pass city + guests filters into Hero */}
+      <Hero city={cityFilter} setCity={setCityFilter} guests={guestsFilter} setGuests={setGuestsFilter} />
       <StatsStrip />
-      {/* Featured renders with filtering by city */}
-      <Featured cityFilter={cityFilter} />
+      {/* Featured renders with filtering by city + capacity */}
+      <Featured cityFilter={cityFilter} guests={guestsFilter} />
       <KenBurnsShowcase />
       <EventStrip />
       <Testimonials />
