@@ -1115,7 +1115,7 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
                     />
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
                     <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">
-                      {h.city}{h.capacity != null ? ` • cap ${h.capacity}` : ""}
+                      {h.city}
                     </div>
                   </div>
 
