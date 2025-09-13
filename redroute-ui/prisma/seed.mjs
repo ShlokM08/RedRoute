@@ -54,7 +54,7 @@ async function main() {
       capacity: 4,
       rating: 4.6,
       description: "Harborfront suites with sweeping marina panoramas.",
-      imageUrl: "/images/featured_hotel.avif",
+      imageUrl: "/images/Marina View Suites.jpg",
       imageAlt: "Marina View Suites",
     },
     {
