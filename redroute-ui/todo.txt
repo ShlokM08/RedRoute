@@ -1,3 +1,8 @@
 1. users should be able to post reviews.
 2. Add a proper login functionality and store it in the DB.
 fix the hotel page location and also they should be able to book a room and also view its details.
+
+
+TO update the seed.mjs
+1.$env:DATABASE_URL = "postgresql://redroute_db_user:6CCYg5Bm1dMCnM0v9n8K5HKHxBay03m7@dpg-d2so49re5dus73eu6c1g-a.oregon-postgres.render.com/redroute_db?sslmode=require"
+2.npx prisma db seed
