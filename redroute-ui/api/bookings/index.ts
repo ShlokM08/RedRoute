@@ -1,100 +1,105 @@
-// api/bookings/index.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+// IMPORTANT for NodeNext/Node16: import with .js
 import prisma from "../_lib/prisma.js";
 
+/**
+ * POST /api/bookings
+ * Body: { hotelId: number|string, checkIn: string(yyyy-mm-dd), checkOut: string(yyyy-mm-dd), guests: number,
+ *         contactName?: string, contactEmail?: string }
+ */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Use POST" });
   }
 
   try {
-    const {
-      hotelId,
-      checkIn,
-      checkOut,
-      guests,
-      contactName,
-      contactEmail,
-    } = (req.body ?? {}) as {
-      hotelId?: number | string;
-      checkIn?: string | null;
-      checkOut?: string | null;
-      guests?: number | string;
-      contactName?: string;
-      contactEmail?: string;
-    };
+    // Body may be parsed by Vercel; still guard
+    const body = (req.body ?? {}) as Record<string, any>;
 
-    // hotelId must be an int (Hotel.id is Int in your schema)
-    const hid = Number(hotelId);
-    if (!hid || !Number.isInteger(hid)) {
-      return res.status(400).json({ error: "hotelId must be an integer" });
+    const hotelId = Number(body.hotelId);
+    const checkInStr = String(body.checkIn || "");
+    const checkOutStr = String(body.checkOut || "");
+    const guests = Number(body.guests ?? 1);
+    const contactName = body.contactName ? String(body.contactName) : undefined;
+    const contactEmail = body.contactEmail ? String(body.contactEmail) : undefined;
+
+    if (!Number.isFinite(hotelId) || hotelId <= 0) {
+      return res.status(400).json({ error: "Invalid hotelId" });
     }
 
-    // dates must exist and checkIn < checkOut
-    const ci = checkIn ? new Date(checkIn) : null;
-    const co = checkOut ? new Date(checkOut) : null;
-    if (!ci || !co || Number.isNaN(+ci) || Number.isNaN(+co) || ci >= co) {
-      return res.status(400).json({ error: "Invalid dates" });
+    // Parse dates as local yyyy-mm-dd → Date at local midnight
+    const ci = new Date(checkInStr);
+    const co = new Date(checkOutStr);
+    if (!Number.isFinite(+ci) || !Number.isFinite(+co) || +co <= +ci) {
+      return res.status(400).json({ error: "Invalid date range" });
     }
 
-    // capacity check
+    if (!Number.isFinite(guests) || guests < 1) {
+      return res.status(400).json({ error: "Invalid guests count" });
+    }
+
+    // Ensure hotel exists and get capacity
     const hotel = await prisma.hotel.findUnique({
-      where: { id: hid },
-      select: { capacity: true },
+      where: { id: hotelId },
+      select: { id: true, capacity: true, name: true },
     });
-    if (!hotel) return res.status(404).json({ error: "Hotel not found" });
-
-    const g = Math.max(1, Number(guests) || 1);
-    if (g > hotel.capacity) {
+    if (!hotel) {
+      return res.status(404).json({ error: "Hotel not found" });
+    }
+    const cap = typeof hotel.capacity === "number" ? hotel.capacity : 1;
+    if (guests > cap) {
       return res
         .status(400)
-        .json({ error: `Guests exceed capacity (${hotel.capacity})` });
+        .json({ error: `Too many guests. Maximum for this hotel is ${cap}.` });
     }
 
-    // Figure out who the user is:
-    // - if you send "x-user-id" from your API auth, that user is used
-    // - otherwise we upsert a "demo" user (safe for dev)
-    const headerUserId =
-      (req.headers["x-user-id"] as string | undefined) ??
-      (req.headers["x-userid"] as string | undefined);
-
-    let userId: string | null = null;
-
-    if (headerUserId) {
-      const u = await prisma.user.findUnique({ where: { id: headerUserId } });
-      userId = u?.id ?? null;
-    }
-
-    if (!userId) {
-      const demo = await prisma.user.upsert({
-        where: { email: "demo@redroute.app" },
-        update: {},
-        create: {
-          email: "demo@redroute.app",
-          passwordHash: "x",
-          firstName: "Demo",
-          lastName: "User",
-        },
-      });
-      userId = demo.id;
-    }
-
-    const booking = await prisma.booking.create({
-      data: {
-        userId: userId!,
-        hotelId: hid,
-        checkIn: ci,
-        checkOut: co,
-        guests: g,
-        contactName: contactName || null,
-        contactEmail: contactEmail || null,
+    // Identify the user.
+    // If you already set userId in an auth cookie/header, read it here.
+    // Fallback: upsert a demo user so the relation is valid.
+    const userEmail =
+      (req.headers["x-user-email"] as string | undefined) ||
+      "demo@redroute.local";
+    const user = await prisma.user.upsert({
+      where: { email: userEmail },
+      update: {},
+      create: {
+        email: userEmail,
+        passwordHash: "demo", // required field in schema
+        firstName: "Demo",
+        lastName: "User",
       },
       select: { id: true },
     });
 
-    return res.status(201).json({ id: booking.id });
-  } catch (err) {
-    console.error("[/api/bookings] error:", err);
-    return res.status(500).json({ error: "Internal error" });
+    // Create the booking
+    const created = await prisma.booking.create({
+      data: {
+        userId: user.id,
+        hotelId: hotel.id,
+        checkIn: ci,
+        checkOut: co,
+        guests,
+        contactName,
+        contactEmail,
+      },
+      select: {
+        id: true,
+        checkIn: true,
+        checkOut: true,
+        guests: true,
+        hotelId: true,
+        userId: true,
+        createdAt: true,
+      },
+    });
+
+    return res.status(201).json({ ok: true, booking: created });
+  } catch (e: any) {
+    // Surface Prisma/validation details in a safe-ish way
+    const msg =
+      e?.code && e?.meta
+        ? `DB error ${e.code}`
+        : e?.message || "Internal error";
+    return res.status(500).json({ error: msg });
   }
 }
