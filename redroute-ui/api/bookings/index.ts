@@ -1,142 +1,76 @@
-// api/bookings/index.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import prisma from "../_lib/prisma.js";
-import jwt from "jsonwebtoken";
 
-/** --- helpers --- */
-function parseCookies(header?: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!header) return out;
-  for (const part of header.split(";")) {
-    const [k, ...rest] = part.trim().split("=");
-    out[decodeURIComponent(k)] = decodeURIComponent(rest.join("=") ?? "");
-  }
-  return out;
-}
+type Body = {
+  hotelId?: number;
+  checkIn?: string;
+  checkOut?: string;
+  guests?: number;
+  contactName?: string;
+  contactEmail?: string;
+};
 
-type JwtShape = { id?: string; userId?: string; email?: string; sub?: string };
-
-async function resolveUserId(req: VercelRequest): Promise<string> {
-  try {
-    const cookies = parseCookies(req.headers.cookie);
-    const token = cookies["token"] || cookies["auth"] || "";
-    if (token) {
-      const secret = process.env.JWT_SECRET || process.env.JWT_KEY || "secret";
-      const decoded = jwt.verify(token, secret) as JwtShape;
-
-      // Try by explicit id first
-      const guessId = decoded.id || decoded.userId || decoded.sub;
-      if (guessId) {
-        const u = await prisma.user.findUnique({ where: { id: String(guessId) } });
-        if (u) return u.id;
-      }
-      // Fallback by email
-      if (decoded.email) {
-        const u = await prisma.user.findUnique({ where: { email: decoded.email } });
-        if (u) return u.id;
-      }
-    }
-  } catch (e) {
-    // token invalid/expired -> ignore, we’ll use demo user below
-    console.warn("[/api/bookings] JWT verify failed:", (e as Error).message);
-  }
-
-  // Final fallback: demo user
-  const demo = await prisma.user.upsert({
-    where: { email: "demo@redroute.local" },
-    update: {},
-    create: {
-      email: "demo@redroute.local",
-      passwordHash: "demo",
-      firstName: "Demo",
-      lastName: "User",
-    },
-  });
-  return demo.id;
-}
-
-function toDateSafe(v: unknown): Date | null {
-  if (typeof v !== "string") return null;
-  // Accept "YYYY-MM-DD" or locale strings
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-/** --- handler --- */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Use POST" });
   }
 
   try {
-    // Get body regardless of framework body parsing
-    const body =
-      (req.body && typeof req.body === "object" ? req.body : undefined) ??
-      (await new Promise<any>((resolve) => {
-        const chunks: Uint8Array[] = [];
-        req.on("data", (c) => chunks.push(c));
-        req.on("end", () => {
-          try {
-            resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
-          } catch {
-            resolve({});
-          }
-        });
-      }));
+    // Vercel usually parses JSON already:
+    const body = (req.body || {}) as Body;
 
-    const {
-      hotelId,
-      checkIn,
-      checkOut,
-      guests = 1,
-      contactName = null,
-      contactEmail = null,
-    } = body ?? {};
+    const hotelId = Number(body.hotelId);
+    const guests = Number(body.guests ?? 1);
+    const checkIn = body.checkIn ? new Date(body.checkIn) : null;
+    const checkOut = body.checkOut ? new Date(body.checkOut) : null;
 
-    const hotelIdNum = Number(hotelId);
-    if (!Number.isFinite(hotelIdNum)) {
-      return res.status(400).json({ error: "hotelId must be a number" });
+    if (!Number.isFinite(hotelId)) return res.status(400).json({ error: "hotelId is required (number)" });
+    if (!checkIn || !checkOut || isNaN(+checkIn) || isNaN(+checkOut) || +checkOut <= +checkIn) {
+      return res.status(400).json({ error: "Invalid check-in/check-out" });
     }
 
-    const ci = toDateSafe(checkIn);
-    const co = toDateSafe(checkOut);
-    if (!ci || !co || ci >= co) {
-      return res.status(400).json({ error: "Invalid check-in / check-out" });
-    }
-
-    const g = Number(guests);
-    if (!Number.isFinite(g) || g < 1) {
-      return res.status(400).json({ error: "guests must be >= 1" });
-    }
-
-    // capacity check
     const hotel = await prisma.hotel.findUnique({
-      where: { id: hotelIdNum },
+      where: { id: hotelId },
       select: { capacity: true },
     });
     if (!hotel) return res.status(404).json({ error: "Hotel not found" });
-    const maxCap = hotel.capacity ?? 2;
-    if (g > maxCap) {
-      return res.status(400).json({ error: `Capacity exceeded. Max ${maxCap} guests.` });
+
+    const cap = hotel.capacity ?? 2;
+    if (guests < 1 || guests > cap) {
+      return res.status(400).json({ error: `Guests must be between 1 and ${cap}` });
     }
 
-    const userId = await resolveUserId(req);
+    // Use logged-in user if you pass it via header/cookie. For now: demo fallback.
+    let userId = (req.headers["x-user-id"] as string | undefined)?.trim();
+    if (!userId) {
+      const demo = await prisma.user.upsert({
+        where: { email: "demo@redroute.local" },
+        update: {},
+        create: {
+          email: "demo@redroute.local",
+          passwordHash: "demo",   // placeholder
+          firstName: "Demo",
+          lastName: "User",
+        },
+      });
+      userId = demo.id;
+    }
 
     const booking = await prisma.booking.create({
       data: {
-        userId,
-        hotelId: hotelIdNum,
-        checkIn: ci,
-        checkOut: co,
-        guests: g,
-        contactName,
-        contactEmail,
+        userId,               // string (your schema)
+        hotelId,              // int
+        checkIn,
+        checkOut,
+        guests,
+        contactName: body.contactName || null,
+        contactEmail: body.contactEmail || null,
       },
     });
 
     return res.status(201).json({ ok: true, bookingId: booking.id });
   } catch (e: any) {
-    console.error("[/api/bookings] error", e);
+    console.error("POST /api/bookings error:", e);
     return res.status(500).json({ error: "Server error" });
   }
 }
