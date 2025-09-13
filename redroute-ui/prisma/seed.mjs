@@ -2,12 +2,33 @@
 import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
+/**
+ * Idempotent upsert:
+ * - Upsert hotel by a stable unique key (here: name). If you later add a `slug` column, use that instead.
+ * - Replace all images for that hotel so updating the URL in seed is deterministic.
+ */
+async function upsertHotel({
+  name, city, country, price, capacity, rating, description,
+  imageUrl, imageAlt,
+}) {
+  const hotel = await prisma.hotel.upsert({
+    where: { name }, // assumes "name" is unique enough for your dataset
+    update: { city, country, price, capacity, rating, description },
+    create: { name, city, country, price, capacity, rating, description },
+  });
+
+  // Replace images in a predictable way
+  await prisma.hotelImage.deleteMany({ where: { hotelId: hotel.id } });
+  await prisma.hotelImage.create({
+    data: { url: imageUrl, alt: imageAlt ?? name, hotelId: hotel.id },
+  });
+
+  return hotel;
+}
+
 async function main() {
   // Wipe (dev-safe). Remove these deletes if you want to preserve data.
-  await prisma.favorite.deleteMany();
-  await prisma.booking.deleteMany();
-  await prisma.hotelImage.deleteMany();
-  await prisma.hotel.deleteMany();
+
   const sameImage = {
     create: [{ url: "/images/featured_hotel.avif", alt: "Skyline Luxe" }],
   };
@@ -69,7 +90,9 @@ async function main() {
       capacity: 4,
       rating: 4.6,
       description: "Harborfront suites with sweeping marina panoramas.",
-      images: sameImage,
+      images: {
+        create: [{ url: "/images/featured_hotel.avif", alt: "Skyline Luxe" }],
+      },
     },
   });
 
@@ -83,8 +106,9 @@ async function main() {
       capacity: 2,
       rating: 4.8,
       description: "Haussmann charm steps from the Seine and cafés.",
-      images: sameImage,
-    },
+images: {
+        create: [{ url: "/images/Left Bank Boutique.jpg", alt: "Left Bank Boutique" }],
+      },    },
   });
 
   // 6) Shinjuku Sky Pods — capacity 2
@@ -97,8 +121,9 @@ async function main() {
       capacity: 2,
       rating: 4.5,
       description: "Futuristic pods with neon views in Shinjuku.",
-      images: sameImage,
-    },
+images: {
+        create: [{ url: "/images/Shinjuku Sky Pods.jpg", alt: "Shinjuku Sky Pods" }],
+      },    },
   });
 
   // 7) Bosphorus Heritage — capacity 3
@@ -111,8 +136,9 @@ async function main() {
       capacity: 3,
       rating: 4.6,
       description: "Ottoman-era details with modern amenities by the strait.",
-      images: sameImage,
-    },
+images: {
+        create: [{ url: "/images/Bosphorus Heritage Hotel.jpeg", alt: "Bosphorus Heritage Hotel" }],
+      },    },
   });
 
   // 8) Midtown Signature — capacity 5
@@ -125,8 +151,9 @@ async function main() {
       capacity: 5,
       rating: 4.7,
       description: "Steps from Broadway with skyline lounge.",
-      images: sameImage,
-    },
+images: {
+        create: [{ url: "/images/Midtown Signature.jpeg", alt: "Midtown Signature" }],
+      },    },
   });
 
   // 9) Trastevere Courtyard Inn — capacity 3
@@ -139,8 +166,9 @@ async function main() {
       capacity: 3,
       rating: 4.4,
       description: "Sun-drenched courtyard in the heart of Trastevere.",
-      images: sameImage,
-    },
+images: {
+        create: [{ url: "/images/Trastevere Courtyard Inn.jpeg", alt: "Trastevere Courtyard Inn" }],
+      },    },
   });
 
   // 10) Riverside Opera House Stay — capacity 4
@@ -153,8 +181,9 @@ async function main() {
       capacity: 4,
       rating: 4.7,
       description: "River views near theatres and markets.",
-      images: sameImage,
-    },
+images: {
+        create: [{ url: "/images/Riverside Opera House Stay.webp", alt: "Riverside Opera House Stay" }],
+      },    },
   });
 
   // 11) Alpine Panorama Lodge — capacity 6
@@ -167,13 +196,13 @@ async function main() {
       capacity: 6,
       rating: 4.6,
       description: "Lakeside alpine lodge with spa and mountain views.",
-      images: sameImage,
-    },
+images: {
+        create: [{ url: "/images/Alpine Panorama Lodge.jpg", alt: "Alpine Panorama Lodge" }],
+      },    },
   });
 }
 
 main()
-  .then(() => console.log("Seed complete"))
   .catch((e) => {
     console.error(e);
     process.exit(1);
