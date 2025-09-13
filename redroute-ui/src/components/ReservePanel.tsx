@@ -27,18 +27,19 @@ export default function ReservePanel({ hotelId, maxGuests = 10 }: Props) {
     setError(null);
     try {
       const r = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", /* "x-user-id": "<demo>" */ },
-        credentials: "include",
-        body: JSON.stringify({
-          hotelId,
-          checkIn: checkIn ? new Date(checkIn).toISOString() : null,
-          checkOut: checkOut ? new Date(checkOut).toISOString() : null,
-          guests,
-          contactName: contactName || undefined,
-          contactEmail: contactEmail || undefined,
-        }),
-      });
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  credentials: "include",
+  body: JSON.stringify({
+    hotelId,
+    checkIn: checkIn ? new Date(checkIn).toISOString() : null,
+    checkOut: checkOut ? new Date(checkOut).toISOString() : null,
+    guests,
+    contactName,
+    contactEmail,
+  }),
+});
+
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
       navigate(`/booking/${data.id}`); // or show a success dialog
