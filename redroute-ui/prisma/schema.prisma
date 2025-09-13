@@ -1,6 +1,5 @@
 generator client {
   provider      = "prisma-client-js"
-  // Needed for Vercel. "native" = your dev box, "debian-openssl-3.0.x" = Vercel.
   binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
 }
 
@@ -13,28 +12,28 @@ model User {
   id           String     @id @default(cuid())
   email        String     @unique
   passwordHash String
-  firstName    String?
-  lastName     String?
-  dob          DateTime?
-  bookings     Booking[]
-  favorites    Favorite[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+  dob          DateTime?
+  firstName    String?
+  lastName     String?
+  bookings     Booking[]
+  favorites    Favorite[]
 }
 
 model Hotel {
-  id          Int          @id @default(autoincrement())
   name        String
   city        String
-  country     String        @default("")   // ⬅️ NEW
   price       Int
-  capacity    Int           @default(2)    // ⬅️ NEW
   rating      Float?
-  description String?                      // ⬅️ NEW (your seed uses it)
   createdAt   DateTime     @default(now())
-  images      HotelImage[]
+  id          Int          @id @default(autoincrement())
+  capacity    Int          @default(2)
+  country     String       @default("")
+  description String?
   bookings    Booking[]
   favorites   Favorite[]
+  images      HotelImage[]
 }
 
 model HotelImage {
@@ -46,23 +45,32 @@ model HotelImage {
 }
 
 model Booking {
-  id        Int      @id @default(autoincrement())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  hotelId   Int
-  hotel     Hotel    @relation(fields: [hotelId], references: [id])
-  checkIn   DateTime
-  checkOut  DateTime
-  createdAt DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+
+  hotelId      Int
+  hotel        Hotel    @relation(fields: [hotelId], references: [id])
+
+  checkIn      DateTime
+  checkOut     DateTime
+
+  // NEW:
+  guests       Int      @default(1)     // number of guests staying
+  contactName  String?                  // optional: person making the booking
+  contactEmail String?                  // optional: email for confirmation
+
+  createdAt    DateTime @default(now())
 }
+
 
 model Favorite {
   id        Int      @id @default(autoincrement())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
   hotelId   Int
-  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  userId    String
   createdAt DateTime @default(now())
+  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 
   @@unique([hotelId, userId])
 }

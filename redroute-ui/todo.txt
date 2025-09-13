@@ -6,3 +6,12 @@ fix the hotel page location and also they should be able to book a room and also
 TO update the seed.mjs
 1.$env:DATABASE_URL = "postgresql://redroute_db_user:6CCYg5Bm1dMCnM0v9n8K5HKHxBay03m7@dpg-d2so49re5dus73eu6c1g-a.oregon-postgres.render.com/redroute_db?sslmode=require"
 2.npx prisma db seed
+
+To make schema changes:
+# Windows PowerShell
+$env:DATABASE_URL="postgresql://<...your prod url...>"
+npm run db:migrate -- --name add-booking-fields
+npm run db:deploy
+
+To view the data in the DB:
+npx prisma studio
