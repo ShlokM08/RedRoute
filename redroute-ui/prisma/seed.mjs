@@ -2,39 +2,18 @@
 import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
-/**
- * Idempotent upsert:
- * - Upsert hotel by a stable unique key (here: name). If you later add a `slug` column, use that instead.
- * - Replace all images for that hotel so updating the URL in seed is deterministic.
- */
-async function upsertHotel({
-  name, city, country, price, capacity, rating, description,
-  imageUrl, imageAlt,
-}) {
-  const hotel = await prisma.hotel.upsert({
-    where: { name }, // assumes "name" is unique enough for your dataset
-    update: { city, country, price, capacity, rating, description },
-    create: { name, city, country, price, capacity, rating, description },
-  });
-
-  // Replace images in a predictable way
-  await prisma.hotelImage.deleteMany({ where: { hotelId: hotel.id } });
-  await prisma.hotelImage.create({
-    data: { url: imageUrl, alt: imageAlt ?? name, hotelId: hotel.id },
-  });
-
-  return hotel;
-}
-
 async function main() {
-  // Wipe (dev-safe). Remove these deletes if you want to preserve data.
+  // --- D E S T R U C T I V E  W I P E  (order matters: children → parent) ---
+  await prisma.$transaction([
+    prisma.favorite.deleteMany(),
+    prisma.booking.deleteMany(),
+    prisma.hotelImage.deleteMany(),
+    prisma.hotel.deleteMany(),
+  ]);
 
-  const sameImage = {
-    create: [{ url: "/images/featured_hotel.avif", alt: "Skyline Luxe" }],
-  };
-  // 1) Skyline Luxe — capacity 2
-  await prisma.hotel.create({
-    data: {
+  // --- R E S E E D  W I T H  O N L Y  T H E S E ---
+  const hotels = [
+    {
       name: "Skyline Luxe Hotel",
       city: "Doha",
       country: "Qatar",
@@ -42,15 +21,10 @@ async function main() {
       capacity: 2,
       rating: 4.9,
       description: "Glass-and-steel views with an infinity pool on the 30th.",
-      images: {
-        create: [{ url: "/images/featured_hotel.avif", alt: "Skyline Luxe" }],
-      },
+      imageUrl: "/images/featured_hotel.avif",
+      imageAlt: "Skyline Luxe",
     },
-  });
-
-  // 2) Coastal Escape — capacity 2
-  await prisma.hotel.create({
-    data: {
+    {
       name: "Coastal Escape Villa",
       city: "Bali",
       country: "Indonesia",
@@ -58,15 +32,10 @@ async function main() {
       capacity: 2,
       rating: 4.8,
       description: "Private beach access, sunset deck and outdoor cinema.",
-      images: {
-        create: [{ url: "/images/featured_villa.jpeg", alt: "Coastal Villa" }],
-      },
+      imageUrl: "/images/featured_villa.jpeg",
+      imageAlt: "Coastal Villa",
     },
-  });
-
-  // 3) Downtown Loft — capacity 2
-  await prisma.hotel.create({
-    data: {
+    {
       name: "Downtown Creative Loft",
       city: "Barcelona",
       country: "Spain",
@@ -74,15 +43,10 @@ async function main() {
       capacity: 2,
       rating: 4.7,
       description: "Industrial-chic loft with skyline terrace.",
-      images: {
-        create: [{ url: "/images/featured_loft.avif", alt: "Loft" }],
-      },
+      imageUrl: "/images/featured_loft.avif",
+      imageAlt: "Loft",
     },
-  });
-
-  // 4) Marina View — capacity 4
-  await prisma.hotel.create({
-    data: {
+    {
       name: "Marina View Suites",
       city: "Dubai",
       country: "UAE",
@@ -90,15 +54,10 @@ async function main() {
       capacity: 4,
       rating: 4.6,
       description: "Harborfront suites with sweeping marina panoramas.",
-      images: {
-        create: [{ url: "/images/featured_hotel.avif", alt: "Skyline Luxe" }],
-      },
+      imageUrl: "/images/featured_hotel.avif",
+      imageAlt: "Marina View Suites",
     },
-  });
-
-  // 5) Left Bank Boutique — capacity 2
-  await prisma.hotel.create({
-    data: {
+    {
       name: "Left Bank Boutique",
       city: "Paris",
       country: "France",
@@ -106,14 +65,10 @@ async function main() {
       capacity: 2,
       rating: 4.8,
       description: "Haussmann charm steps from the Seine and cafés.",
-images: {
-        create: [{ url: "/images/Left Bank Boutique.jpg", alt: "Left Bank Boutique" }],
-      },    },
-  });
-
-  // 6) Shinjuku Sky Pods — capacity 2
-  await prisma.hotel.create({
-    data: {
+      imageUrl: "/images/Left Bank Boutique.jpg",
+      imageAlt: "Left Bank Boutique",
+    },
+    {
       name: "Shinjuku Sky Pods",
       city: "Tokyo",
       country: "Japan",
@@ -121,14 +76,10 @@ images: {
       capacity: 2,
       rating: 4.5,
       description: "Futuristic pods with neon views in Shinjuku.",
-images: {
-        create: [{ url: "/images/Shinjuku Sky Pods.jpg", alt: "Shinjuku Sky Pods" }],
-      },    },
-  });
-
-  // 7) Bosphorus Heritage — capacity 3
-  await prisma.hotel.create({
-    data: {
+      imageUrl: "/images/Shinjuku Sky Pods.jpg",
+      imageAlt: "Shinjuku Sky Pods",
+    },
+    {
       name: "Bosphorus Heritage Hotel",
       city: "Istanbul",
       country: "Türkiye",
@@ -136,14 +87,10 @@ images: {
       capacity: 3,
       rating: 4.6,
       description: "Ottoman-era details with modern amenities by the strait.",
-images: {
-        create: [{ url: "/images/Bosphorus Heritage Hotel.jpeg", alt: "Bosphorus Heritage Hotel" }],
-      },    },
-  });
-
-  // 8) Midtown Signature — capacity 5
-  await prisma.hotel.create({
-    data: {
+      imageUrl: "/images/Bosphorus Heritage Hotel.jpeg",
+      imageAlt: "Bosphorus Heritage Hotel",
+    },
+    {
       name: "Midtown Signature",
       city: "New York",
       country: "USA",
@@ -151,14 +98,10 @@ images: {
       capacity: 5,
       rating: 4.7,
       description: "Steps from Broadway with skyline lounge.",
-images: {
-        create: [{ url: "/images/Midtown Signature.jpeg", alt: "Midtown Signature" }],
-      },    },
-  });
-
-  // 9) Trastevere Courtyard Inn — capacity 3
-  await prisma.hotel.create({
-    data: {
+      imageUrl: "/images/Midtown Signature.jpeg",
+      imageAlt: "Midtown Signature",
+    },
+    {
       name: "Trastevere Courtyard Inn",
       city: "Rome",
       country: "Italy",
@@ -166,14 +109,10 @@ images: {
       capacity: 3,
       rating: 4.4,
       description: "Sun-drenched courtyard in the heart of Trastevere.",
-images: {
-        create: [{ url: "/images/Trastevere Courtyard Inn.jpeg", alt: "Trastevere Courtyard Inn" }],
-      },    },
-  });
-
-  // 10) Riverside Opera House Stay — capacity 4
-  await prisma.hotel.create({
-    data: {
+      imageUrl: "/images/Trastevere Courtyard Inn.jpeg",
+      imageAlt: "Trastevere Courtyard Inn",
+    },
+    {
       name: "Riverside Opera House Stay",
       city: "London",
       country: "United Kingdom",
@@ -181,14 +120,10 @@ images: {
       capacity: 4,
       rating: 4.7,
       description: "River views near theatres and markets.",
-images: {
-        create: [{ url: "/images/Riverside Opera House Stay.webp", alt: "Riverside Opera House Stay" }],
-      },    },
-  });
-
-  // 11) Alpine Panorama Lodge — capacity 6
-  await prisma.hotel.create({
-    data: {
+      imageUrl: "/images/Riverside Opera House Stay.webp",
+      imageAlt: "Riverside Opera House Stay",
+    },
+    {
       name: "Alpine Panorama Lodge",
       city: "Zurich",
       country: "Switzerland",
@@ -196,10 +131,31 @@ images: {
       capacity: 6,
       rating: 4.6,
       description: "Lakeside alpine lodge with spa and mountain views.",
-images: {
-        create: [{ url: "/images/Alpine Panorama Lodge.jpg", alt: "Alpine Panorama Lodge" }],
-      },    },
-  });
+      imageUrl: "/images/Alpine Panorama Lodge.jpg",
+      imageAlt: "Alpine Panorama Lodge",
+    },
+  ];
+
+  for (const h of hotels) {
+    const created = await prisma.hotel.create({
+      data: {
+        name: h.name,
+        city: h.city,
+        country: h.country,
+        price: h.price,
+        capacity: h.capacity,
+        rating: h.rating,
+        description: h.description,
+        images: {
+          create: [{ url: h.imageUrl, alt: h.imageAlt }],
+        },
+      },
+    });
+    // Optional: log what was created
+    // console.log("Created hotel:", created.name);
+  }
+
+  console.log("Seed complete (wipe + fresh insert).");
 }
 
 main()
