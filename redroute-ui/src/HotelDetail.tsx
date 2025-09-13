@@ -1,35 +1,46 @@
 // src/HotelDetail.tsx
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, Star, MapPin } from "lucide-react";
 import { motion } from "framer-motion";
 
 type HotelImage = { url: string; alt?: string | null };
 type Hotel = {
-  id: string;                 // id comes in as string from URL
+  id: number;                 // DB is Int → number
   name: string;
   city: string;
   price: number;
   rating: number | null;
+  capacity: number;           // returned by /api/hotels/:id
   images: HotelImage[];
-  capacity?: number | null;   // ← added; used for guest limit
+};
+
+/* helpers */
+const fmtDate = (d: Date) => d.toISOString().slice(0, 10); // yyyy-mm-dd
+const plusDays = (d: Date, n: number) => {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
 };
 
 export default function HotelDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const abortRef = useRef<AbortController | null>(null);
 
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   // reservation state
-  const [checkIn, setCheckIn] = useState<string>("");
-  const [checkOut, setCheckOut] = useState<string>("");
+  const today = useMemo(() => new Date(), []);
+  const [checkIn, setCheckIn] = useState<string>(fmtDate(plusDays(today, 1)));
+  const [checkOut, setCheckOut] = useState<string>(fmtDate(plusDays(today, 3)));
   const [guests, setGuests] = useState<number>(1);
   const [busy, setBusy] = useState(false);
   const [reserveMsg, setReserveMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // load hotel
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -41,10 +52,15 @@ export default function HotelDetail() {
         return;
       }
 
-      const url = `/api/hotels/${encodeURIComponent(id)}`;
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
 
       try {
-        const r = await fetch(url, { credentials: "include" });
+        const r = await fetch(`/api/hotels/${encodeURIComponent(id)}`, {
+          credentials: "include",
+          signal: ac.signal,
+        });
 
         const ct = r.headers.get("content-type") || "";
         if (!ct.includes("application/json")) {
@@ -61,32 +77,39 @@ export default function HotelDetail() {
 
         const data: Hotel = await r.json();
         setHotel(data);
-        // set sensible default guests within capacity
-        const cap = typeof data.capacity === "number" ? data.capacity : 10;
-        setGuests((g) => Math.max(1, Math.min(g, cap)));
+
+        // keep guests in 1..capacity
+        const cap = Number.isFinite(data.capacity) ? data.capacity : 10;
+        setGuests((g) => Math.min(Math.max(1, g), cap));
       } catch (e: any) {
-        setErr(e?.message || "Could not fetch hotel details.");
+        if (e?.name !== "AbortError") {
+          setErr(e?.message || "Could not fetch hotel details.");
+        }
       } finally {
-        setLoading(false);
+        if (!ac.signal.aborted) setLoading(false);
       }
     })();
+
+    return () => abortRef.current?.abort();
   }, [id]);
 
-  const cap = hotel?.capacity ?? 10;
+  const cap = hotel?.capacity ?? 1;
   const mainImg = hotel?.images?.[0]?.url || "/images/featured_hotel.avif";
 
-  function validDates() {
+  const datesValid = useMemo(() => {
     if (!checkIn || !checkOut) return false;
     const ci = new Date(checkIn);
     const co = new Date(checkOut);
-    return !isNaN(+ci) && !isNaN(+co) && +co > +ci;
-  }
+    return Number.isFinite(+ci) && Number.isFinite(+co) && +co > +ci;
+  }, [checkIn, checkOut]);
+
+  const canReserve = !!hotel && datesValid && guests >= 1 && guests <= cap && !busy;
 
   async function reserve() {
     setReserveMsg(null);
-
     if (!hotel || !id) return;
-    if (!validDates()) {
+
+    if (!datesValid) {
       setReserveMsg({ ok: false, text: "Please select a valid date range." });
       return;
     }
@@ -102,7 +125,7 @@ export default function HotelDetail() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          hotelId: Number(id), // convert route param string → number
+          hotelId: Number(id), // route param → number
           checkIn,
           checkOut,
           guests,
@@ -112,9 +135,7 @@ export default function HotelDetail() {
       const isJson = (r.headers.get("content-type") || "").includes("application/json");
       const payload = isJson ? await r.json().catch(() => null) : null;
 
-      if (!r.ok) {
-        throw new Error(payload?.error || `Failed (HTTP ${r.status})`);
-      }
+      if (!r.ok) throw new Error(payload?.error || `Failed (HTTP ${r.status})`);
 
       setReserveMsg({ ok: true, text: "Reserved! We’ve saved your booking details." });
     } catch (e: any) {
@@ -186,11 +207,9 @@ export default function HotelDetail() {
                 <span className="inline-flex items-center gap-1">
                   <Star className="h-4 w-4" /> {hotel.rating ?? "—"}
                 </span>
-                {typeof hotel.capacity === "number" && (
-                  <span className="inline-flex items-center gap-1">
-                    • Capacity: {hotel.capacity}
-                  </span>
-                )}
+                <span className="inline-flex items-center gap-1">
+                  • Capacity: {cap}
+                </span>
               </div>
             </div>
           </div>
@@ -209,6 +228,7 @@ export default function HotelDetail() {
                   <input
                     type="date"
                     value={checkIn}
+                    min={fmtDate(plusDays(today, 0))}
                     onChange={(e) => setCheckIn(e.target.value)}
                     className="h-10 w-full rounded-xl border border-white/15 bg-white/5 px-3 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-red-600/60"
                   />
@@ -218,6 +238,7 @@ export default function HotelDetail() {
                   <input
                     type="date"
                     value={checkOut}
+                    min={checkIn || fmtDate(plusDays(today, 1))}
                     onChange={(e) => setCheckOut(e.target.value)}
                     className="h-10 w-full rounded-xl border border-white/15 bg-white/5 px-3 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-red-600/60"
                   />
@@ -250,7 +271,7 @@ export default function HotelDetail() {
                   <label className="mb-1 block text-xs text-transparent select-none">Reserve</label>
                   <button
                     onClick={reserve}
-                    disabled={busy}
+                    disabled={!canReserve}
                     className="h-10 w-full rounded-xl bg-[#E50914] px-6 font-semibold shadow-[0_10px_30px_rgba(229,9,20,0.45)] hover:brightness-110 disabled:opacity-60"
                   >
                     {busy ? "Reserving..." : "Reserve Now"}
@@ -259,11 +280,7 @@ export default function HotelDetail() {
               </div>
 
               {reserveMsg && (
-                <div
-                  className={`mt-2 text-sm ${
-                    reserveMsg.ok ? "text-emerald-400" : "text-red-400"
-                  }`}
-                >
+                <div className={`mt-2 text-sm ${reserveMsg.ok ? "text-emerald-400" : "text-red-400"}`}>
                   {reserveMsg.text}
                 </div>
               )}
@@ -294,25 +311,23 @@ export default function HotelDetail() {
             <div>
               <h2 className="mb-2 text-2xl font-semibold">Overview</h2>
               <p className="text-white/80">
-                A modern stay in {hotel.city}, rated {hotel.rating ?? "—"}★ and starting at $
-                {hotel.price}/night, awaits travelers looking for more than just a room. Perfect for
-                a cinematic escape with RedRoute’s lightning-fast checkout, this hotel wraps
-                contemporary design around classic comfort to create an unforgettable experience.
+                A modern stay in {hotel.city}, rated {hotel.rating ?? "—"}★ and starting at ${hotel.price}/night,
+                awaits travelers looking for more than just a room. Perfect for a cinematic escape with RedRoute’s
+                lightning-fast checkout, this hotel wraps contemporary design around classic comfort to create an
+                unforgettable experience.
                 <br />
                 <br />
-                Step into spacious, light-filled rooms featuring plush bedding, designer
-                furnishings, and tech-forward touches like smart climate control and high-speed
-                Wi-Fi. Many rooms open to sweeping city views or private balconies—ideal for morning
-                coffee or sunset cocktails. Indulge in a rooftop pool that glows after dark, an
-                inviting spa for mid-journey rejuvenation, and a vibrant lounge where local music
-                and signature drinks set the tone for the night.
+                Step into spacious, light-filled rooms featuring plush bedding, designer furnishings, and tech-forward
+                touches like smart climate control and high-speed Wi-Fi. Many rooms open to sweeping city views or
+                private balconies—ideal for morning coffee or sunset cocktails. Indulge in a rooftop pool that glows
+                after dark, an inviting spa for mid-journey rejuvenation, and a vibrant lounge where local music and
+                signature drinks set the tone for the night.
                 <br />
                 <br />
-                Located in the heart of {hotel.city}, you’ll be steps from cultural landmarks,
-                buzzing nightlife, and hidden gems known only to locals. Whether you’re planning a
-                romantic weekend, an adventure with friends, or a solo city break, the combination
-                of attentive service, world-class amenities, and effortless RedRoute booking makes
-                this hotel the perfect base for memories that linger long after checkout.
+                Located in the heart of {hotel.city}, you’ll be steps from cultural landmarks, buzzing nightlife, and
+                hidden gems known only to locals. Whether you’re planning a romantic weekend, an adventure with friends,
+                or a solo city break, the combination of attentive service, world-class amenities, and effortless
+                RedRoute booking makes this hotel the perfect base for memories that linger long after checkout.
               </p>
             </div>
           </div>
