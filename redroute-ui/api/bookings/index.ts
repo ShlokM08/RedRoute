@@ -1,6 +1,6 @@
 // api/bookings/index.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import prisma from "../_lib/prisma.js"; // <- keep the .js extension for Vercel
+import prisma from "../_lib/prisma.js"; // keep .js for Vercel
 
 type Body = {
   hotelId?: number | string;
@@ -11,15 +11,99 @@ type Body = {
   contactEmail?: string | null;
 };
 
+// ---------- tiny helpers ----------
 function bad(res: VercelResponse, code: number, msg: string) {
   return res.status(code).json({ error: msg });
 }
 
+function firstHeader(h: string | string[] | undefined): string | undefined {
+  if (typeof h === "string") return h;
+  if (Array.isArray(h)) return h[0];
+  return undefined;
+}
+
+function parseCookies(header: string | undefined) {
+  const out: Record<string, string> = {};
+  if (!header) return out;
+  for (const part of header.split(/; */)) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const k = decodeURIComponent(part.slice(0, eq).trim());
+    const v = decodeURIComponent(part.slice(eq + 1).trim());
+    out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Try to resolve the authenticated user id from:
+ * 1) Authorization: Bearer <JWT> (reads payload, then verifies by DB lookup)
+ * 2) x-user-id / x-user-email headers
+ * 3) Cookies: uid/userId/user_id or email
+ *
+ * NOTE: This does NOT verify JWT signatures (no deps). If you want signature
+ * verification, add `jose` and we can wire it up.
+ */
+async function resolveUserIdFromRequest(req: VercelRequest): Promise<string | null> {
+  // 1) Authorization: Bearer <jwt>
+  const rawAuth =
+    firstHeader((req.headers as any)["authorization"]) ??
+    firstHeader((req.headers as any)["Authorization"]);
+  const bearer = rawAuth && rawAuth.startsWith("Bearer ") ? rawAuth.slice(7).trim() : null;
+  if (bearer && bearer.split(".").length === 3) {
+    try {
+      const payloadJson = Buffer.from(bearer.split(".")[1], "base64url").toString("utf8");
+      const payload = JSON.parse(payloadJson) as any;
+      const candidateId: string | undefined = payload.sub || payload.userId || payload.uid;
+      const candidateEmail: string | undefined = payload.email;
+      if (candidateId) {
+        const u = await prisma.user.findUnique({ where: { id: candidateId } });
+        if (u) return u.id;
+      }
+      if (candidateEmail) {
+        const u = await prisma.user.findUnique({ where: { email: candidateEmail } });
+        if (u) return u.id;
+      }
+    } catch {
+      // ignore invalid token shapes
+    }
+  }
+
+  // 2) Headers
+  const headerUserId = firstHeader(req.headers["x-user-id"]);
+  if (headerUserId && headerUserId.trim()) {
+    const u = await prisma.user.findUnique({ where: { id: headerUserId.trim() } });
+    if (u) return u.id;
+  }
+  const headerUserEmail = firstHeader(req.headers["x-user-email"]);
+  if (headerUserEmail && headerUserEmail.trim()) {
+    const u = await prisma.user.findUnique({ where: { email: headerUserEmail.trim() } });
+    if (u) return u.id;
+  }
+
+  // 3) Cookies
+  const cookies = parseCookies(firstHeader(req.headers["cookie"]));
+  const cookieUserId = cookies.uid || cookies.userId || cookies.user_id;
+  if (cookieUserId) {
+    const u = await prisma.user.findUnique({ where: { id: cookieUserId } });
+    if (u) return u.id;
+  }
+  const cookieEmail = cookies.email || cookies.user_email;
+  if (cookieEmail) {
+    const u = await prisma.user.findUnique({ where: { email: cookieEmail } });
+    if (u) return u.id;
+  }
+
+  return null;
+}
+
+// ---------- handler ----------
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     return bad(res, 405, "Use POST");
   }
 
+  // parse body
   let body: Body;
   try {
     body = (typeof req.body === "string" ? JSON.parse(req.body) : req.body) ?? {};
@@ -29,15 +113,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { hotelId, checkIn, checkOut, guests = 1, contactName, contactEmail } = body;
 
-  // Basic validation
+  // validate hotelId
   const hotelIdNum = Number(hotelId);
   if (!hotelId || Number.isNaN(hotelIdNum)) {
     return bad(res, 400, "hotelId must be a number");
   }
+
+  // validate dates
   if (!checkIn || !checkOut) {
     return bad(res, 400, "checkIn and checkOut are required (ISO date strings)");
   }
-
   const ci = new Date(checkIn);
   const co = new Date(checkOut);
   if (Number.isNaN(+ci) || Number.isNaN(+co) || +co <= +ci) {
@@ -45,7 +130,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Ensure hotel exists + get capacity
+    // resolve authenticated user
+    const userId = await resolveUserIdFromRequest(req);
+    if (!userId) {
+      return bad(res, 401, "Not authenticated");
+    }
+
+    // ensure hotel exists & capacity
     const hotel = await prisma.hotel.findUnique({
       where: { id: hotelIdNum },
       select: { id: true, capacity: true, name: true },
@@ -57,11 +148,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return bad(res, 400, `guests must be between 1 and ${cap}`);
     }
 
-    // Overlap check (same hotel)
+    // check for overlapping bookings on same hotel:
+    // overlap if (existing.checkIn < co) && (existing.checkOut > ci)
     const overlap = await prisma.booking.findFirst({
       where: {
         hotelId: hotelIdNum,
-        // overlap logic: (existing.checkIn < co) && (existing.checkOut > ci)
         AND: [{ checkIn: { lt: co } }, { checkOut: { gt: ci } }],
       },
       select: { id: true },
@@ -70,34 +161,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return bad(res, 409, "This date range is unavailable for the selected hotel.");
     }
 
-    // Resolve userId:
-    // 1) Allow callers to pass a header "x-user-id" if your auth sets one
-    // 2) Otherwise, upsert a demo user so bookings always have a user
-    let userId: string | null = null;
-
-    const headerUser = req.headers["x-user-id"];
-    if (typeof headerUser === "string" && headerUser.trim()) {
-      const maybe = await prisma.user.findUnique({ where: { id: headerUser.trim() } });
-      userId = maybe?.id ?? null;
-    }
-
-    if (!userId) {
-      const demoEmail = "demo@redroute.local";
-      const demo = await prisma.user.upsert({
-        where: { email: demoEmail },
-        update: {},
-        create: {
-          email: demoEmail,
-          passwordHash: "demo", // placeholder; not used for auth
-          firstName: "Demo",
-          lastName: "User",
-        },
-        select: { id: true },
-      });
-      userId = demo.id;
-    }
-
-    // Create the booking
+    // create booking with the REAL userId
     const booking = await prisma.booking.create({
       data: {
         userId,
@@ -123,7 +187,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(201).json({ ok: true, booking });
   } catch (err: any) {
-    // Surface Prisma error codes when helpful (e.g., P2002/P2022/etc.)
     const code = err?.code ? ` (code ${err.code})` : "";
     console.error("Create booking error:", err);
     return bad(res, 500, `Server error${code}`);

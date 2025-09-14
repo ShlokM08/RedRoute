@@ -31,6 +31,17 @@ import {
   Plus,
 } from "lucide-react";
 
+/* --------------------- cookie helpers (NEW) --------------------- */
+function setCookie(name: string, value: string, days = 7) {
+  const maxAge = `Max-Age=${days * 24 * 60 * 60}`;
+  const sameSite = "SameSite=Lax";
+  const secure = typeof window !== "undefined" && window.location.protocol === "https:" ? " Secure" : "";
+  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; Path=/; ${maxAge}; ${sameSite};${secure}`;
+}
+function deleteCookie(name: string) {
+  document.cookie = `${encodeURIComponent(name)}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
+
 /* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
 function KenBurnsShowcase() {
   const slides = [
@@ -461,24 +472,23 @@ function GuestsPopover({
   }, [open]);
 
   function bump(key: keyof Guests, delta: number) {
-  // Start from current value (controlled by parent)
-  let next: Guests = {
-    adults: value.adults,
-    kids: value.kids,
-  };
+    // Start from current value (controlled by parent)
+    let next: Guests = {
+      adults: value.adults,
+      kids: value.kids,
+    };
 
-  if (key === "adults") {
-    next.adults = Math.max(MIN_ADULTS, value.adults + delta);
-  } else {
-    next.kids = Math.max(0, value.kids + delta);
+    if (key === "adults") {
+      next.adults = Math.max(MIN_ADULTS, value.adults + delta);
+    } else {
+      next.kids = Math.max(0, value.kids + delta);
+    }
+
+    // Respect total cap
+    if (next.adults + next.kids > MAX_TOTAL) return;
+
+    onChange(next); // pass a value, not a function
   }
-
-  // Respect total cap
-  if (next.adults + next.kids > MAX_TOTAL) return;
-
-  onChange(next); // pass a value, not a function
-}
-
 
   function Row({ title, note, value, onMinus, onPlus, disabledMinus, disabledPlus }: {
     title: string; note?: string; value: number;
@@ -688,7 +698,7 @@ function CalendarPopover() {
 
             <div className="px-3 py-2">
               <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
-                {dow.map((d) => (<div key={d} className="py-1">{d}</div>))}
+                {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d) => (<div key={d} className="py-1">{d}</div>))}
               </div>
 
               <div className="grid grid-cols-7 gap-1">
@@ -790,7 +800,6 @@ function SiteFooter() {
 }
 
 /* ----------------------------- HERO SECTION -------------------------------- */
-/** NOTE: Black background only (no video). */
 function Hero({
   city,
   setCity,
@@ -823,16 +832,26 @@ function Hero({
 
     (async () => {
       try {
+        // IMPORTANT: include credentials so cookies round-trip
         const r = await fetch("/api/auth/me", { credentials: "include" });
         if (r.ok) {
           const me = await r.json().catch(() => null);
           const fn: string | undefined =
             me?.user?.firstName || me?.firstName || me?.user?.name || me?.name;
+          const id: string | undefined = me?.user?.id || me?.id;
+          const email: string | undefined = me?.user?.email || me?.email;
+
           if (fn && fn.trim()) {
             localStorage.setItem("rr_name", fn);
             setFirstName(fn.split(" ")[0]);
-            return;
           }
+          // NEW: set cookies that /api/bookings reads (uid/email)
+          if (id && typeof id === "string") setCookie("uid", id, 7);
+          if (email && typeof email === "string") {
+            localStorage.setItem("rr_email", email);
+            setCookie("email", email, 7);
+          }
+          return;
         }
       } catch {}
       const email = (localStorage.getItem("rr_email") || "").trim();
@@ -900,7 +919,7 @@ function Hero({
                     <CalendarPopover />
                   </Field>
                   <Field icon={<User className="size-4" />} label="Guests">
-                    <GuestsPopover value={guests} onChange={setGuests} />
+                    <GuestsPopover value={guests} onChange={setGuests as any} />
                   </Field>
                   <Field label={<span className="sr-only">Search</span>}>
                     <Button
@@ -1038,7 +1057,7 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
     (async () => {
       setLoading(true);
       try {
-        const r = await fetch("/api/hotels", { credentials: "include" });
+        const r = await fetch("/api/hotels", { credentials: "include" }); // keep cookies
         if (!r.ok) {
           const maybeJson = await r.json().catch(() => null);
           const msg = maybeJson?.error ?? `HTTP ${r.status}`;
@@ -1150,6 +1169,7 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
     </section>
   );
 }
+
 /* --------------------------------- Events ---------------------------------- */
 function EventStrip() {
   const ev = [
@@ -1218,6 +1238,14 @@ export default function RedRouteLandingUltra() {
     try {
       localStorage.removeItem("rr_demo_user");
       localStorage.removeItem("rr_guest");
+      localStorage.removeItem("rr_name");
+      localStorage.removeItem("rr_email");
+      // clear auth cookies used by API
+      deleteCookie("uid");
+      deleteCookie("userId");
+      deleteCookie("user_id");
+      deleteCookie("email");
+      deleteCookie("user_email");
     } catch {}
     navigate("/");
   };
