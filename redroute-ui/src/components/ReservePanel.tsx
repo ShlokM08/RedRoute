@@ -3,9 +3,21 @@ import { Button } from "../components/ui/button";
 import { Minus, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+/* ---------------- auth helper ---------------- */
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const r = await fetch("/api/auth/me", { credentials: "include" });
+  if (!r.ok) throw new Error("Not authenticated");
+  const me = await r.json().catch(() => ({}));
+  const id = me?.user?.id ?? me?.id ?? null;
+  const email = me?.user?.email ?? me?.email ?? null;
+  if (id) return { "x-user-id": String(id) };
+  if (email) return { "x-user-email": String(email) };
+  throw new Error("Not authenticated");
+}
+
 type Props = {
   hotelId: number;
-  maxGuests?: number; // hotel.capacity (optional—will still be validated server-side)
+  maxGuests?: number;
 };
 
 export default function ReservePanel({ hotelId, maxGuests = 10 }: Props) {
@@ -26,25 +38,27 @@ export default function ReservePanel({ hotelId, maxGuests = 10 }: Props) {
     setSubmitting(true);
     setError(null);
     try {
+      const authHeaders = await getAuthHeaders();
+
       const r = await fetch("/api/bookings", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  credentials: "include",
-  body: JSON.stringify({
-    hotelId,
-    checkIn: checkIn ? new Date(checkIn).toISOString() : null,
-    checkOut: checkOut ? new Date(checkOut).toISOString() : null,
-    guests,
-    contactName,
-    contactEmail,
-  }),
-});
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        credentials: "include",
+        body: JSON.stringify({
+          hotelId,
+          checkIn: checkIn ? new Date(checkIn).toISOString() : null,
+          checkOut: checkOut ? new Date(checkOut).toISOString() : null,
+          guests,
+          contactName: contactName || null,
+          contactEmail: contactEmail || null,
+        }),
+      });
 
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
-      const bookingId = data?.booking?.id;
-if (!bookingId) throw new Error("Missing booking id in response");
-navigate(`/booking/${bookingId}`); // or show a success dialog
+
+      // ✅ server returns { ok: true, booking: {...} }
+      navigate(`/booking/${data.booking.id}`);
     } catch (e: any) {
       setError(e.message || "Failed to reserve");
     } finally {
@@ -85,14 +99,16 @@ navigate(`/booking/${bookingId}`); // or show a success dialog
             type="button"
             onClick={dec}
             className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white/10 hover:bg-white/20"
+            aria-label="Decrease guests"
           >
             <Minus className="size-4" />
           </button>
-          <div className="w-6 text-center text-sm tabular-nums">{guests}</div>
+          <div className="w-8 text-center text-sm tabular-nums">{guests}</div>
           <button
             type="button"
             onClick={inc}
             className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white/10 hover:bg-white/20"
+            aria-label="Increase guests"
           >
             <Plus className="size-4" />
           </button>
