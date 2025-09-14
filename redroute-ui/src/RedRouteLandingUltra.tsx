@@ -647,7 +647,7 @@ function CalendarPopover() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const dow = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  //const dow = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const isSelected = useCallback(
     (d: Date) => (start && isSameDate(d, start)) || (end && isSameDate(d, end)),
     [start, end]
