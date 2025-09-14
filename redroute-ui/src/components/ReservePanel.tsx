@@ -42,7 +42,9 @@ export default function ReservePanel({ hotelId, maxGuests = 10 }: Props) {
 
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
-      navigate(`/booking/${data.id}`); // or show a success dialog
+      const bookingId = data?.booking?.id;
+if (!bookingId) throw new Error("Missing booking id in response");
+navigate(`/booking/${bookingId}`); // or show a success dialog
     } catch (e: any) {
       setError(e.message || "Failed to reserve");
     } finally {
