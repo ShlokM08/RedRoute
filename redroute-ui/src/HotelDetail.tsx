@@ -1,6 +1,6 @@
 // src/HotelDetail.tsx
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, Star, MapPin } from "lucide-react";
 import { motion } from "framer-motion";
 
