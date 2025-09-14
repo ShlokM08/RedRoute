@@ -1,31 +1,30 @@
 // src/HotelDetail.tsx
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, Star, MapPin } from "lucide-react";
-import { motion } from "framer-motion";
+import { ChevronLeft, ChevronRight, Star, MapPin, Minus, Plus } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-/* -------- auth helper added (keeps UI unchanged) -------- */
+/* -------------------- auth helper (keeps real user) -------------------- */
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  try {
-    const r = await fetch("/api/auth/me", { credentials: "include" });
-    if (!r.ok) throw new Error("Not authenticated");
-    const me = await r.json().catch(() => ({}));
-    const id = (me?.user?.id ?? me?.id) as string | undefined;
-    const email = (me?.user?.email ?? me?.email) as string | undefined;
-    if (id) return { "x-user-id": String(id) };
-    if (email) return { "x-user-email": String(email) };
-  } catch {}
+  const r = await fetch("/api/auth/me", { credentials: "include" });
+  if (!r.ok) throw new Error("Not authenticated");
+  const me = await r.json().catch(() => ({}));
+  const id = me?.user?.id ?? me?.id ?? null;
+  const email = me?.user?.email ?? me?.email ?? null;
+  if (id) return { "x-user-id": String(id) };
+  if (email) return { "x-user-email": String(email) };
   throw new Error("Not authenticated");
 }
 
+/* ------------------------- types & helpers ------------------------- */
 type HotelImage = { url: string; alt?: string | null };
 type Hotel = {
-  id: number;                 // DB is Int → number
+  id: number;
   name: string;
   city: string;
   price: number;
   rating: number | null;
-  capacity: number;           // returned by /api/hotels/:id
+  capacity: number;
   images: HotelImage[];
 };
 
@@ -34,13 +33,234 @@ function plusDays(d: Date, n: number) {
   x.setDate(x.getDate() + n);
   return x;
 }
-function fmtDate(d: Date) {
+function fmtDateYMD(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
 }
 
+/* ~~~~~~~~~~~~~~~~~~~~~ DateRangePopover (pill calendar) ~~~~~~~~~~~~~~~~~~~~~ */
+type DayCell = { date: Date; currentMonth: boolean; isToday: boolean };
+
+const isSameDate = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate();
+
+const isWithin = (d: Date, a: Date | null, b: Date | null) => {
+  if (!a || !b) return false;
+  const t = +new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const t1 = +new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const t2 = +new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  const [min, max] = t1 <= t2 ? [t1, t2] : [t2, t1];
+  return t > min && t < max;
+};
+
+const fmtShort = (d: Date) =>
+  d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+function useMonthMatrix(year: number, month: number) {
+  return useMemo(() => {
+    const first = new Date(year, month, 1);
+    const startWeekday = (first.getDay() + 6) % 7; // Mon=0
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const prevMonthDays = new Date(year, month, 0).getDate();
+
+    const cells: DayCell[] = [];
+    for (let i = startWeekday - 1; i >= 0; i--) {
+      const d = prevMonthDays - i;
+      const date = new Date(year, month - 1, d);
+      cells.push({ date, currentMonth: false, isToday: isSameDate(date, new Date()) });
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(year, month, d);
+      cells.push({ date, currentMonth: true, isToday: isSameDate(date, new Date()) });
+    }
+    while (cells.length % 7 !== 0) {
+      const last = cells[cells.length - 1]?.date ?? new Date(year, month, 1);
+      const date = new Date(last);
+      date.setDate(date.getDate() + 1);
+      cells.push({ date, currentMonth: false, isToday: isSameDate(date, new Date()) });
+    }
+    return cells;
+  }, [year, month]);
+}
+
+function DateRangePopover({
+  startYMD,
+  endYMD,
+  onChange,
+  placeholder = "Select dates",
+}: {
+  startYMD: string;
+  endYMD: string;
+  onChange: (start: string, end: string) => void; // YYYY-MM-DD
+  placeholder?: string;
+}) {
+  const anchorRef = useRef<HTMLDivElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const initStart = startYMD ? new Date(startYMD) : null;
+  const initEnd = endYMD ? new Date(endYMD) : null;
+  const [start, setStart] = useState<Date | null>(initStart);
+  const [end, setEnd] = useState<Date | null>(initEnd);
+
+  useEffect(() => {
+    setStart(startYMD ? new Date(startYMD) : null);
+    setEnd(endYMD ? new Date(endYMD) : null);
+  }, [startYMD, endYMD]);
+
+  const now = new Date();
+  const [viewY, setViewY] = useState((start ?? now).getFullYear());
+  const [viewM, setViewM] = useState((start ?? now).getMonth());
+
+  const cells = useMonthMatrix(viewY, viewM);
+  const monthName = (y: number, m: number) =>
+    new Date(y, m, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
+
+  const label =
+    start && end ? `${fmtShort(start)} — ${fmtShort(end)}` : start ? `${fmtShort(start)} — …` : "";
+
+  const onPrev = () => {
+    const m = viewM - 1;
+    if (m < 0) {
+      setViewM(11);
+      setViewY((y) => y - 1);
+    } else setViewM(m);
+  };
+  const onNext = () => {
+    const m = viewM + 1;
+    if (m > 11) {
+      setViewM(0);
+      setViewY((y) => y + 1);
+    } else setViewM(m);
+  };
+
+  const onPick = (d: Date) => {
+    if (!start || (start && end)) {
+      setStart(d);
+      setEnd(null);
+    } else {
+      const newStart = start;
+      const newEnd = d;
+      setEnd(d);
+      setTimeout(() => {
+        onChange(fmtDateYMD(newStart), fmtDateYMD(newEnd));
+        setOpen(false);
+      }, 80);
+    }
+  };
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (!open) return;
+      const t = e.target as Node;
+      if (
+        popRef.current &&
+        !popRef.current.contains(t) &&
+        anchorRef.current &&
+        !anchorRef.current.contains(t)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const selected = (d: Date) =>
+    (start && isSameDate(d, start)) || (end && isSameDate(d, end));
+  const inRange = (d: Date) => isWithin(d, start, end);
+
+  return (
+    <div ref={anchorRef} className="relative">
+      <button
+        type="button"
+        className="h-10 w-full rounded-xl px-3 text-left text-sm border border-white/15 bg-white/5 text-white/90 hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-red-600/60"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+      >
+        {label || placeholder}
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            ref={popRef}
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 240, damping: 20 }}
+            className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg-[rgba(0,0,0,0.7)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
+            role="dialog"
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.06]">
+              <button
+                onClick={onPrev}
+                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
+                aria-label="Previous month"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <div className="text-sm font-semibold">{monthName(viewY, viewM)}</div>
+              <button
+                onClick={onNext}
+                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
+                aria-label="Next month"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+
+            <div className="px-3 py-2">
+              <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
+                {dow.map((d) => (
+                  <div key={d} className="py-1">{d}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {cells.map(({ date, currentMonth, isToday }, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => onPick(date)}
+                    className={[
+                      "relative h-10 rounded-lg text-sm",
+                      "border border-white/10",
+                      currentMonth ? "text-white/90" : "text-white/40",
+                      "bg-white/5 hover:bg-white/10",
+                      selected(date) ? "bg-[#E50914] text-white border-[#E50914]" : "",
+                      inRange(date) ? "bg-white/10" : "",
+                      isToday && !selected(date) ? "ring-1 ring-white/30" : "",
+                    ].join(" ")}
+                    title={date.toDateString()}
+                  >
+                    {date.getDate()}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-white/60">
+                <span>Pick start, then end</span>
+                <button
+                  className="underline hover:text-white"
+                  onClick={() => { setStart(null); setEnd(null); onChange("", ""); }}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* =============================== PAGE ================================= */
 export default function HotelDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -50,8 +270,8 @@ export default function HotelDetail() {
   const [err, setErr] = useState<string | null>(null);
 
   const today = new Date();
-  const [checkIn, setCheckIn] = useState<string>(fmtDate(plusDays(today, 1)));
-  const [checkOut, setCheckOut] = useState<string>(fmtDate(plusDays(today, 3)));
+  const [checkIn, setCheckIn] = useState<string>(fmtDateYMD(plusDays(today, 1)));
+  const [checkOut, setCheckOut] = useState<string>(fmtDateYMD(plusDays(today, 3)));
   const [guests, setGuests] = useState<number>(2);
 
   const [busy, setBusy] = useState(false);
@@ -61,10 +281,7 @@ export default function HotelDetail() {
 
   const ci = useMemo(() => (checkIn ? new Date(checkIn) : null), [checkIn]);
   const co = useMemo(() => (checkOut ? new Date(checkOut) : null), [checkOut]);
-  const datesValid = useMemo(() => {
-    if (!ci || !co) return false;
-    return +co > +ci;
-  }, [ci, co]);
+  const datesValid = useMemo(() => !!(ci && co && +co > +ci), [ci, co]);
 
   useEffect(() => {
     (async () => {
@@ -83,20 +300,15 @@ export default function HotelDetail() {
           credentials: "include",
           signal: ac.signal,
         });
-
         const ct = r.headers.get("content-type") || "";
         if (!ct.includes("application/json")) {
-          const text = await r.text().catch(() => "");
-          throw new Error(
-            `Expected JSON but got ${ct || "unknown"}. First bytes: ${text.slice(0, 60) || "n/a"}`
-          );
+          const txt = await r.text().catch(() => "");
+          throw new Error(`Expected JSON but got ${ct || "unknown"}: ${txt.slice(0, 80)}`);
         }
-
         if (!r.ok) {
           const j = await r.json().catch(() => null);
           throw new Error(j?.error || `Failed to load (HTTP ${r.status})`);
         }
-
         const data: Hotel = await r.json();
         setHotel(data);
         setErr(null);
@@ -115,7 +327,6 @@ export default function HotelDetail() {
   async function reserve() {
     setReserveMsg(null);
     if (!hotel || !id) return;
-
     if (!datesValid) {
       setReserveMsg({ ok: false, text: "Please select a valid date range." });
       return;
@@ -128,24 +339,23 @@ export default function HotelDetail() {
     setBusy(true);
     try {
       const authHeaders = await getAuthHeaders();
-
       const r = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
         credentials: "include",
         body: JSON.stringify({
-          hotelId: Number(id), // route param → number
+          hotelId: Number(id),
           checkIn,
           checkOut,
           guests,
         }),
       });
 
-      const isJson = (r.headers.get("content-type") || "").includes("application/json");
-      const payload = isJson ? await r.json().catch(() => null) : null;
+      const payload = (r.headers.get("content-type") || "").includes("application/json")
+        ? await r.json().catch(() => null)
+        : null;
 
       if (!r.ok) throw new Error(payload?.error || `Failed (HTTP ${r.status})`);
-
       setReserveMsg({ ok: true, text: "Reserved! We’ve saved your booking details." });
     } catch (e: any) {
       setReserveMsg({ ok: false, text: e?.message || "Could not complete reservation." });
@@ -154,6 +364,7 @@ export default function HotelDetail() {
     }
   }
 
+  /* --------------------------- UI (your style) -------------------------- */
   return (
     <div className="min-h-screen bg-black text-white">
       <button
@@ -221,40 +432,47 @@ export default function HotelDetail() {
               </div>
             </div>
 
-            {/* Reserve panel (your UI) */}
+            {/* Reserve panel */}
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="grid grid-cols-2 gap-3 md:grid-cols-5 md:items-end">
-                <label className="text-sm">
-                  <span className="mb-1 block text-white/80">Check-in</span>
-                  <input
-                    type="date"
-                    value={checkIn}
-                    onChange={(e) => setCheckIn(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-white/15 bg-white/5 px-3 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-red-600/60"
+                <div className="md:col-span-2">
+                  <div className="mb-1 text-sm text-white/80">Dates</div>
+                  <DateRangePopover
+                    startYMD={checkIn}
+                    endYMD={checkOut}
+                    onChange={(s, e) => {
+                      setCheckIn(s);
+                      setCheckOut(e);
+                    }}
+                    placeholder="Select dates"
                   />
-                </label>
-                <label className="text-sm">
-                  <span className="mb-1 block text-white/80">Check-out</span>
-                  <input
-                    type="date"
-                    value={checkOut}
-                    onChange={(e) => setCheckOut(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-white/15 bg-white/5 px-3 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-red-600/60"
-                  />
-                </label>
+                </div>
+
                 <label className="text-sm">
                   <span className="mb-1 block text-white/80">Guests (max {cap})</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={cap}
-                    value={guests}
-                    onChange={(e) =>
-                      setGuests(Math.max(1, Math.min(cap, Number(e.target.value) || 1)))
-                    }
-                    className="h-10 w-full rounded-xl border border-white/15 bg-white/5 px-3 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-red-600/60"
-                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setGuests((g) => Math.max(1, g - 1))}
+                      className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white text-black hover:bg-white/90"
+                      aria-label="Decrease guests"
+                    >
+                      <Minus className="size-4" />
+                    </button>
+
+                    <div className="w-8 text-center text-sm tabular-nums">{guests}</div>
+
+                    <button
+                      type="button"
+                      onClick={() => setGuests((g) => Math.min(cap, g + 1))}
+                      className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white text-black hover:bg-white/90"
+                      aria-label="Increase guests"
+                    >
+                      <Plus className="size-4" />
+                    </button>
+                  </div>
                 </label>
+
                 <div className="md:col-span-2">
                   <button
                     onClick={reserve}
