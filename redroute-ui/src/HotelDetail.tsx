@@ -324,45 +324,27 @@ export default function HotelDetail() {
 
   const cap = hotel?.capacity ?? 10;
 
-  async function reserve() {
-    setReserveMsg(null);
-    if (!hotel || !id) return;
-    if (!datesValid) {
-      setReserveMsg({ ok: false, text: "Please select a valid date range." });
-      return;
-    }
-    if (guests < 1 || guests > cap) {
-      setReserveMsg({ ok: false, text: `Guests must be between 1 and ${cap}.` });
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const authHeaders = await getAuthHeaders();
-      const r = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
-        credentials: "include",
-        body: JSON.stringify({
-          hotelId: Number(id),
-          checkIn,
-          checkOut,
-          guests,
-        }),
-      });
-
-      const payload = (r.headers.get("content-type") || "").includes("application/json")
-        ? await r.json().catch(() => null)
-        : null;
-
-      if (!r.ok) throw new Error(payload?.error || `Failed (HTTP ${r.status})`);
-      setReserveMsg({ ok: true, text: "Reserved! We’ve saved your booking details." });
-    } catch (e: any) {
-      setReserveMsg({ ok: false, text: e?.message || "Could not complete reservation." });
-    } finally {
-      setBusy(false);
-    }
+async function reserve() {
+  if (!hotel || !id) return;
+  if (!datesValid) {
+    setReserveMsg({ ok: false, text: "Please select a valid date range." });
+    return;
   }
+  const totalGuests = Math.max(1, Math.min(cap, guests));
+  navigate("/checkout", {
+    state: {
+      hotelId: Number(id),
+      name: hotel.name,
+      city: hotel.city,
+      image: hotel.images?.[0]?.url || "/images/featured_hotel.avif",
+      price: hotel.price,          // nightly
+      checkIn,
+      checkOut,
+      guests: totalGuests,
+    },
+  });
+}
+
 
   /* --------------------------- UI (your style) -------------------------- */
   return (

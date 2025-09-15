@@ -1,3 +1,4 @@
+// src/App.tsx
 import { useEffect } from "react";
 import {
   BrowserRouter,
@@ -6,10 +7,12 @@ import {
   Navigate,
   Outlet,
 } from "react-router-dom";
+
 import SignIn from "./SignIn";
 import RedRouteLandingUltra from "./RedRouteLandingUltra";
 import SquareImage from "./components/SquareImage";
 import HotelDetail from "./HotelDetail";
+import Checkout from "./Checkout";            // ⟵ NEW
 import { hasValidSession, clearSession } from "./session";
 
 function RequireAuth() {
@@ -37,11 +40,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public routes */}
         <Route path="/login" element={<SignIn />} />
-
-        {/* Allow hotel detail without auth to confirm issue */}
+        {/* Allow hotel detail without auth (your original behavior) */}
         <Route path="/hotels/:id" element={<HotelDetail />} />
 
+        {/* Auth-gated routes */}
         <Route element={<RequireAuth />}>
           <Route path="/home" element={<RedRouteLandingUltra />} />
           <Route
@@ -62,8 +66,11 @@ export default function App() {
               </div>
             }
           />
+          {/* NEW: Checkout is behind auth so payment/booking only happens for logged-in users */}
+          <Route path="/checkout" element={<Checkout />} />
         </Route>
 
+        {/* Misc */}
         <Route path="/logout" element={<Logout />} />
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
