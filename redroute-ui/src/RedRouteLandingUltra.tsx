@@ -1,6 +1,6 @@
+// src/RedRouteLandingUltra.tsx
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-
 import {
   motion,
   useMotionValue,
@@ -12,7 +12,6 @@ import {
   AnimatePresence,
 } from "framer-motion";
 import { Button } from "./components/ui/button";
-
 import {
   Calendar,
   MapPin,
@@ -103,31 +102,6 @@ function Field({
   );
 }
 
-/* ----------------------------- TILT CARD ----------------------------------- */
-/*function TiltCard({ children }: { children: React.ReactNode }) {
-  const rx = useSpring(0, { stiffness: 120, damping: 12 });
-  const ry = useSpring(0, { stiffness: 120, damping: 12 });
-
-  function onMove(e: React.MouseEvent<HTMLDivElement>) {
-    const el = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - el.left) / el.width;
-    const y = (e.clientY - el.top) / el.height;
-    ry.set(clamp((x - 0.5) * 16, -8, 8));
-    rx.set(clamp(-(y - 0.5) * 16, -8, 8));
-  }
-  function onLeave() { rx.set(0); ry.set(0); }
-
-  return (
-    <motion.div
-      style={{ rotateX: rx, rotateY: ry, transformPerspective: 900 }}
-      onMouseMove={onMove}
-      onMouseLeave={onLeave}
-    >
-      {children}
-    </motion.div>
-  );
-}*/
-
 /* ------------------------- SCROLL PROGRESS BAR ----------------------------- */
 function ScrollProgress() {
   const { scrollYProgress } = useScroll();
@@ -140,7 +114,7 @@ function ScrollProgress() {
   );
 }
 
-/* ----------------------- THEMED CALENDAR POPOVER --------------------------- */
+/* ----------------------- THEMED CALENDAR POPOVER (controlled) -------------- */
 type DayCell = { date: Date; currentMonth: boolean; isToday: boolean };
 
 function useMonthMatrix(year: number, month: number) {
@@ -169,28 +143,20 @@ function useMonthMatrix(year: number, month: number) {
     return cells;
   }, [year, month]);
 }
-
 const monthName = (y: number, m: number) =>
   new Date(y, m, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
-
 const isSameDate = (a: Date, b: Date) =>
-  a.getFullYear() === b.getFullYear() &&
-  a.getMonth() === b.getMonth() &&
-  a.getDate() === b.getDate();
-
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const isWithin = (d: Date, a: Date | null, b: Date | null) => {
   if (!a || !b) return false;
   const t = +new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const t1 = +new Date(a.getFullYear(), a.getMonth(), a.getDate());
-  const t2 = +new Date(b.getFullYear?.() ?? b.getFullYear(), b.getMonth(), b.getDate()); // defensive
+  const t2 = +new Date(b.getFullYear?.() ?? b.getFullYear(), b.getMonth(), b.getDate());
   const [min, max] = t1 <= t2 ? [t1, t2] : [t2, t1];
   return t > min && t < max;
 };
+const fmtShort = (d: Date) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-const fmtShort = (d: Date) =>
-  d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-
-/* ------------------------ INPUT PRIMITIVE ------------------ */
 function PillInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
@@ -201,6 +167,157 @@ function PillInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
         "hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-red-600/60",
       ].join(" ")}
     />
+  );
+}
+
+function CalendarPopover({
+  value,
+  onChange,
+}: {
+  value?: { start: Date | null; end: Date | null };
+  onChange?: (v: { start: Date | null; end: Date | null }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
+
+  const now = new Date();
+  const [viewY, setViewY] = useState(now.getFullYear());
+  const [viewM, setViewM] = useState(now.getMonth());
+
+  const [start, setStart] = useState<Date | null>(value?.start ?? null);
+  const [end, setEnd] = useState<Date | null>(value?.end ?? null);
+
+  useEffect(() => {
+    if (value) { setStart(value.start ?? null); setEnd(value.end ?? null); }
+  }, [value?.start, value?.end]);
+
+  useEffect(() => { onChange?.({ start, end }); }, [start, end]);
+
+  const cells = useMonthMatrix(viewY, viewM);
+
+  const onPrev = () => {
+    const m = viewM - 1;
+    setViewM(m < 0 ? 11 : m);
+    if (m < 0) setViewY((y) => y - 1);
+  };
+  const onNext = () => {
+    const m = viewM + 1;
+    setViewM(m > 11 ? 0 : m);
+    if (m > 11) setViewY((y) => y + 1);
+  };
+
+  const onPick = (d: Date) => {
+    if (!start || (start && end)) { setStart(d); setEnd(null); }
+    else { setEnd(d); setTimeout(() => setOpen(false), 120); }
+  };
+
+  const label =
+    start && end ? `${fmtShort(start)} — ${fmtShort(end)}`
+      : start ? `${fmtShort(start)} — …`
+      : "";
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (!open) return;
+      const t = e.target as Node;
+      if (popRef.current && !popRef.current.contains(t) && anchorRef.current && !anchorRef.current.contains(t)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const isSelected = useCallback(
+    (d: Date) => (start && isSameDate(d, start)) || (end && isSameDate(d, end)),
+    [start, end]
+  );
+
+  return (
+    <div ref={anchorRef} className="relative">
+      <PillInput
+        readOnly
+        value={label}
+        placeholder="Select dates"
+        onClick={() => setOpen(true)}
+        onFocus={() => setOpen(true)}
+        role="combobox"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label="Select dates"
+      />
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            ref={popRef}
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 240, damping: 20 }}
+            className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg-[rgba(0,0,0,0.7)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
+            role="dialog"
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.06]">
+              <button
+                onClick={onPrev}
+                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
+                aria-label="Previous month"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <div className="text-sm font-semibold">{monthName(viewY, viewM)}</div>
+              <button
+                onClick={onNext}
+                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
+                aria-label="Next month"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+
+            <div className="px-3 py-2">
+              <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
+                {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d) => (<div key={d} className="py-1">{d}</div>))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1">
+                {cells.map(({ date, currentMonth, isToday }, idx) => {
+                  const selected = isSelected(date);
+                  const inRange = isWithin(date, start, end);
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => onPick(date)}
+                      className={[
+                        "relative h-10 rounded-lg text-sm",
+                        "border border-white/10",
+                        currentMonth ? "text-white/90" : "text-white/40",
+                        "bg-white/5 hover:bg-white/10",
+                        selected ? "bg-[#E50914] text-white border-[#E50914]" : "",
+                        inRange ? "bg-white/10" : "",
+                        isToday && !selected ? "ring-1 ring-white/30" : "",
+                      ].join(" ")}
+                      title={date.toDateString()}
+                    >
+                      {date.getDate()}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-white/60">
+                <span>Pick start, then end</span>
+                <button className="underline hover:text-white" onClick={() => { setStart(null); setEnd(null); }}>
+                  Clear
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -401,7 +518,6 @@ type Guests = { adults: number; kids: number };
 const MIN_ADULTS = 1;
 const MAX_TOTAL = 10;
 
-/** CONTROLLED: value + onChange come from parent so we can filter by capacity */
 function GuestsPopover({
   value,
   onChange,
@@ -537,317 +653,8 @@ function GuestsPopover({
   );
 }
 
-/* ----------------------- CALENDAR POPOVER (pill-styled) -------------------- */
-function CalendarPopover() {
-  const [open, setOpen] = useState(false);
-  const anchorRef = useRef<HTMLDivElement | null>(null);
-  const popRef = useRef<HTMLDivElement | null>(null);
-
-  const now = new Date();
-  const [viewY, setViewY] = useState(now.getFullYear());
-  const [viewM, setViewM] = useState(now.getMonth());
-
-  const [start, setStart] = useState<Date | null>(null);
-  const [end, setEnd] = useState<Date | null>(null);
-
-  const cells = useMonthMatrix(viewY, viewM);
-
-  const onPrev = () => {
-    const m = viewM - 1;
-    if (m < 0) { setViewM(11); setViewY((y) => y - 1); } else setViewM(m);
-  };
-  const onNext = () => {
-    const m = viewM + 1;
-    if (m > 11) { setViewM(0); setViewY((y) => y + 1); } else setViewM(m);
-  };
-
-  const onPick = (d: Date) => {
-    if (!start || (start && end)) {
-      setStart(d);
-      setEnd(null);
-    } else {
-      setEnd(d);
-      setTimeout(() => setOpen(false), 120);
-    }
-  };
-
-  const label =
-    start && end
-      ? `${fmtShort(start)} — ${fmtShort(end)}`
-      : start
-      ? `${fmtShort(start)} — …`
-      : "";
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (!open) return;
-      const t = e.target as Node;
-      if (
-        popRef.current &&
-        !popRef.current.contains(t) &&
-        anchorRef.current &&
-        !anchorRef.current.contains(t)
-      ) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const isSelected = useCallback(
-    (d: Date) => (start && isSameDate(d, start)) || (end && isSameDate(d, end)),
-    [start, end]
-  );
-
-  return (
-    <div ref={anchorRef} className="relative">
-      <PillInput
-        readOnly
-        value={label}
-        placeholder="Select dates"
-        onClick={() => setOpen(true)}
-        onFocus={() => setOpen(true)}
-        role="combobox"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-label="Select dates"
-      />
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            ref={popRef}
-            initial={{ opacity: 0, y: 8, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 240, damping: 20 }}
-            className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg-[rgba(0,0,0,0.7)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
-            role="dialog"
-          >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.06]">
-              <button
-                onClick={onPrev}
-                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
-                aria-label="Previous month"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-              <div className="text-sm font-semibold">{monthName(viewY, viewM)}</div>
-              <button
-                onClick={onNext}
-                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
-                aria-label="Next month"
-              >
-                <ChevronRight className="size-4" />
-              </button>
-            </div>
-
-            <div className="px-3 py-2">
-              <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
-                {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d) => (<div key={d} className="py-1">{d}</div>))}
-              </div>
-
-              <div className="grid grid-cols-7 gap-1">
-                {cells.map(({ date, currentMonth, isToday }, idx) => {
-                  const selected = isSelected(date);
-                  const inRange = isWithin(date, start, end);
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => onPick(date)}
-                      className={[
-                        "relative h-10 rounded-lg text-sm",
-                        "border border-white/10",
-                        currentMonth ? "text-white/90" : "text-white/40",
-                        "bg-white/5 hover:bg-white/10",
-                        selected ? "bg-[#E50914] text-white border-[#E50914]" : "",
-                        inRange ? "bg-white/10" : "",
-                        isToday && !selected ? "ring-1 ring-white/30" : "",
-                      ].join(" ")}
-                      title={date.toDateString()}
-                    >
-                      {date.getDate()}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-white/60">
-                <span>Pick start, then end</span>
-                <button className="underline hover:text-white" onClick={() => { setStart(null); setEnd(null); }}>
-                  Clear
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/* ----------------------------- HERO SECTION -------------------------------- */
-function Hero({
-  city,
-  setCity,
-  guests,
-  setGuests,
-}: {
-  city: string;
-  setCity: (c: string) => void;
-  guests: Guests;
-  setGuests: (g: Guests | ((prev: Guests) => Guests)) => void;
-}) {
-  // cursor glow & parallax (kept)
-  const mx = useMotionValue(0.5);
-  const my = useMotionValue(0.5);
-  const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
-  const pPanel = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
-
-  const glowX = useTransform(mx, (v) => `${v * 100}%`);
-  const glowY = useTransform(my, (v) => `${v * 100}%`);
-
-  // Personalized headline
-  const [firstName, setFirstName] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fromLS = (localStorage.getItem("rr_name") || "").trim();
-    if (fromLS) {
-      setFirstName(fromLS.split(" ")[0]);
-      return;
-    }
-
-    (async () => {
-      try {
-        const r = await fetch("/api/auth/me", { credentials: "include" });
-        if (r.ok) {
-          const me = await r.json().catch(() => null);
-          const fn: string | undefined =
-            me?.user?.firstName || me?.firstName || me?.user?.name || me?.name;
-          const id: string | undefined = me?.user?.id || me?.id;
-          const email: string | undefined = me?.user?.email || me?.email;
-
-          if (fn && fn.trim()) {
-            localStorage.setItem("rr_name", fn);
-            setFirstName(fn.split(" ")[0]);
-          }
-          if (id && typeof id === "string") setCookie("uid", id, 7);
-          if (email && typeof email === "string") {
-            localStorage.setItem("rr_email", email);
-            setCookie("email", email, 7);
-          }
-          return;
-        }
-      } catch {}
-      const email = (localStorage.getItem("rr_email") || "").trim();
-      if (email.includes("@")) {
-        const guess = email.split("@")[0];
-        if (guess) setFirstName(guess);
-      }
-    })();
-  }, []);
-
-  const headline = `Welcome to RedRoute${firstName ? `,\u00A0${firstName}` : ""}`;
-
-  function onMove(e: React.MouseEvent<HTMLDivElement>) {
-    const r = e.currentTarget.getBoundingClientRect();
-    mx.set((e.clientX - r.left) / r.width);
-    my.set((e.clientY - r.top) / r.height);
-  }
-
-  const scrollToFeatured = () => {
-    const el = document.getElementById("featured");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
-
-  return (
-    <section className="relative text-white z-40 isolate bg-black">
-      <div className="relative h-[55vh] md:h-[48vh] w-full overflow-visible">
-        <div className="absolute inset-0 -z-10 [background:radial-gradient(900px_circle_at_20%_10%,rgba(229,9,20,0.20),transparent_60%),radial-gradient(900px_circle_at_85%_15%,rgba(255,107,107,0.16),transparent_65%)]" />
-        <div className="pointer-events-none absolute -left-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-25 mix-blend-screen">
-          <div className="h-full w-full animate-[spin_36s_linear_infinite] [background:conic-gradient(from_0deg_at_50%_50%,rgba(229,9,20,0.28),transparent_30%,rgba(255,255,255,0.14),transparent_60%,rgba(229,9,20,0.22),transparent_90%)]" />
-        </div>
-        <div className="pointer-events-none absolute -right-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-20 mix-blend-screen">
-          <div className="h-full w-full animate-[spin_48s_linear_infinite_reverse] [background:conic-gradient(from_140deg_at_50%_50%,rgba(255,255,255,0.12),transparent_25%,rgba(229,9,20,0.22),transparent_65%,rgba(255,255,255,0.12),transparent_95%)]" />
-        </div>
-
-        <div className="absolute inset-0 grid place-items-center px-4" onMouseMove={onMove}>
-          <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-visible z-30">
-            <motion.div
-              className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
-              style={{ left: glowX, top: glowY, translateX: "-50%", translateY: "-50%" }}
-            />
-
-            <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
-              <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
-                <Kinetic text={headline} className="text-4xl md:text-6xl" />
-                <p className="max-w-xl text-sm md:text-base text-white/85">
-                  Hotels. Events. Experiences. Your gateway to the time of your life—anywhere, anytime!
-                </p>
-                <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                  <MagneticButton />
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] md:text-sm text-white/75">
-                  <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Trusted by 120k+</div>
-                  <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">4.9★ rating</div>
-                  <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Lightning checkout</div>
-                </div>
-              </motion.div>
-
-              {/* RIGHT: compact search with controlled destination & guests */}
-              <motion.div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur" style={{ transform: pPanel }}>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
-                  <Field icon={<MapPin className="size-4" />} label="Destination">
-                    <DestinationPicker value={city} onChange={setCity} />
-                  </Field>
-                  <Field icon={<Calendar className="size-4" />} label="Dates">
-                    <CalendarPopover />
-                  </Field>
-                  <Field icon={<User className="size-4" />} label="Guests">
-                    <GuestsPopover value={guests} onChange={setGuests as any} />
-                  </Field>
-                  <Field label={<span className="sr-only">Search</span>}>
-                    <Button
-                      className="h-10 w-full text-sm rounded-xl relative overflow-hidden"
-                      onClick={scrollToFeatured}
-                    >
-                      <span className="relative z-10">Search</span>
-                      <span className="pointer-events-none absolute inset-0 translate-x-[-120%] bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] animate-[sheen_1.8s_linear_infinite]" />
-                    </Button>
-                  </Field>
-                </div>
-
-                <div className="mt-3 overflow-hidden rounded-xl border border-white/10">
-                  <div className="flex animate-[marquee_18s_linear_infinite] whitespace-nowrap text-[11px] md:text-xs [mask-image:linear-gradient(90deg,transparent,black_10%,black_90%,transparent)]">
-                    {Array.from({ length: 16 }).map((_, i) => (
-                      <span key={i} className="px-4 py-2 text-white/80">
-                        🔥 Doha Jazz Fest • 🏨 Skyline Luxe Deal • 🎟️ Rooftop Cinema • 🎤 Live Arena Tour • 🎭 Theatre Night
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          </div>
-        </div>
-
-        <style>{`
-          @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
-          @keyframes spin { to { transform: rotate(360deg); } }
-          @keyframes sheen { 0% { transform: translateX(-120%);} 100% { transform: translateX(120%);} }
-          @media (prefers-reduced-motion: reduce) {
-            .animate-[marquee_18s_linear_infinite] { animation: none !important; }
-            .animate-[spin_36s_linear_infinite], .animate-[spin_48s_linear_infinite_reverse] { animation: none !important; }
-          }
-        `}</style>
-      </div>
-    </section>
-  );
-}
-
 /* ---------------------- Magnetic demo button with sheen -------------------- */
-function MagneticButton() {
+function MagneticButton({ onClick }: { onClick?: () => void }) {
   const x = useSpring(0, { stiffness: 200, damping: 15 });
   const y = useSpring(0, { stiffness: 200, damping: 15 });
 
@@ -865,6 +672,7 @@ function MagneticButton() {
       onMouseMove={onMove}
       onMouseLeave={onLeave}
       whileTap={{ scale: 0.98 }}
+      onClick={onClick}
       style={{ x, y, background: RR.red }}
       className="group relative inline-flex items-center gap-2 overflow-hidden rounded-2xl px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(229,9,20,0.45)]"
     >
@@ -1065,7 +873,6 @@ type EventItem = {
   imageUrl: string;
   imageAlt?: string | null;
 };
-
 function formatWhen(iso: string) {
   const d = new Date(iso);
   const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -1077,17 +884,10 @@ function formatWhen(iso: string) {
 function KenBurnsShowcase({ events }: { events: EventItem[] }) {
   const slides = (events ?? [])
     .slice(0, 8)
-    .map((e) => ({
-      img: e.imageUrl,
-      title: e.name,
-      sub: `${e.location} • ${formatWhen(e.startsAt)}`,
-    }));
+    .map((e) => ({ img: e.imageUrl, title: e.name, sub: `${e.location} • ${formatWhen(e.startsAt)}` }));
 
   const seq = slides.length > 0 ? [...slides, ...slides] : [];
-
-  if (seq.length === 0) {
-    return null;
-  }
+  if (seq.length === 0) return null;
 
   return (
     <section className="px-6 pb-16 text-white">
@@ -1125,7 +925,6 @@ function KenBurnsShowcase({ events }: { events: EventItem[] }) {
 function EventCard({ ev }: { ev: EventItem }) {
   const navigate = useNavigate();
   const when = formatWhen(ev.startsAt);
-
   return (
     <article
       className="group overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm cursor-pointer hover:brightness-110 transition"
@@ -1142,7 +941,6 @@ function EventCard({ ev }: { ev: EventItem }) {
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
         <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">{ev.location}</div>
       </div>
-
       <div className="p-4 text-white">
         <div className="flex items-start justify-between gap-3">
           <div className="pr-4">
@@ -1192,6 +990,154 @@ function EventStrip({ events, loading, error }: { events: EventItem[]; loading: 
   );
 }
 
+/* ----------------------------- HERO (no live filter; commit on Search) ----- */
+type DatesState = { start: Date | null; end: Date | null };
+function Hero({
+  city, setCity,
+  guests, setGuests,
+  dates, setDates,
+  onSearch,
+}: {
+  city: string;
+  setCity: (c: string) => void;
+  guests: Guests;
+  setGuests: (g: Guests | ((prev: Guests) => Guests)) => void;
+  dates: DatesState;
+  setDates: (v: DatesState) => void;
+  onSearch: () => void; // commit filters + scroll handled by parent
+}) {
+  // cursor glow & parallax (kept)
+  const mx = useMotionValue(0.5);
+  const my = useMotionValue(0.5);
+  const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
+  const pPanel = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
+
+  const glowX = useTransform(mx, (v) => `${v * 100}%`);
+  const glowY = useTransform(my, (v) => `${v * 100}%`);
+
+  // Personalized headline
+  const [firstName, setFirstName] = useState<string | null>(null);
+  useEffect(() => {
+    const fromLS = (localStorage.getItem("rr_name") || "").trim();
+    if (fromLS) { setFirstName(fromLS.split(" ")[0]); return; }
+    (async () => {
+      try {
+        const r = await fetch("/api/auth/me", { credentials: "include" });
+        if (r.ok) {
+          const me = await r.json().catch(() => null);
+          const fn: string | undefined =
+            me?.user?.firstName || me?.firstName || me?.user?.name || me?.name;
+          const id: string | undefined = me?.user?.id || me?.id;
+          const email: string | undefined = me?.user?.email || me?.email;
+
+          if (fn && fn.trim()) { localStorage.setItem("rr_name", fn); setFirstName(fn.split(" ")[0]); }
+          if (id && typeof id === "string") setCookie("uid", id, 7);
+          if (email && typeof email === "string") { localStorage.setItem("rr_email", email); setCookie("email", email, 7); }
+          return;
+        }
+      } catch {}
+      const email = (localStorage.getItem("rr_email") || "").trim();
+      if (email.includes("@")) {
+        const guess = email.split("@")[0];
+        if (guess) setFirstName(guess);
+      }
+    })();
+  }, []);
+
+  const headline = `Welcome to RedRoute${firstName ? `,\u00A0${firstName}` : ""}`;
+
+  function onMove(e: React.MouseEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    mx.set((e.clientX - r.left) / r.width);
+    my.set((e.clientY - r.top) / r.height);
+  }
+
+  return (
+    <section className="relative text-white z-40 isolate bg-black">
+      <div className="relative h-[55vh] md:h-[48vh] w-full overflow-visible">
+        <div className="absolute inset-0 -z-10 [background:radial-gradient(900px_circle_at_20%_10%,rgba(229,9,20,0.20),transparent_60%),radial-gradient(900px_circle_at_85%_15%,rgba(255,107,107,0.16),transparent_65%)]" />
+        <div className="pointer-events-none absolute -left-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-25 mix-blend-screen">
+          <div className="h-full w-full animate-[spin_36s_linear_infinite] [background:conic-gradient(from_0deg_at_50%_50%,rgba(229,9,20,0.28),transparent_30%,rgba(255,255,255,0.14),transparent_60%,rgba(229,9,20,0.22),transparent_90%)]" />
+        </div>
+        <div className="pointer-events-none absolute -right-1/3 top-0 -z-10 h-[150%] w-[80%] opacity-20 mix-blend-screen">
+          <div className="h-full w-full animate-[spin_48s_linear_infinite_reverse] [background:conic-gradient(from_140deg_at_50%_50%,rgba(255,255,255,0.12),transparent_25%,rgba(229,9,20,0.22),transparent_65%,rgba(255,255,255,0.12),transparent_95%)]" />
+        </div>
+
+        <div className="absolute inset-0 grid place-items-center px-4" onMouseMove={onMove}>
+          <div className="w-full max-w-7xl rounded-[28px] border border-white/12 bg-black/35 backdrop-blur-md shadow-[0_20px_60px_rgba(0,0,0,.45)] p-6 md:p-8 relative overflow-visible z-30">
+            <motion.div
+              className="pointer-events-none absolute h-[260px] w-[260px] -z-10 rounded-full bg-[radial-gradient(circle,rgba(229,9,20,0.14),transparent_60%)]"
+              style={{ left: glowX, top: glowY, translateX: "-50%", translateY: "-50%" }}
+            />
+
+            <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 relative">
+              <motion.div className="space-y-3 md:space-y-4" style={{ transform: pTitle }}>
+                <Kinetic text={headline} className="text-4xl md:text-6xl" />
+                <p className="max-w-xl text-sm md:text-base text-white/85">
+                  Hotels. Events. Experiences. Your gateway to the time of your life—anywhere, anytime!
+                </p>
+                <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                  {/* Book Now acts like Search + scroll */}
+                  <MagneticButton onClick={onSearch} />
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] md:text-sm text-white/75">
+                  <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Trusted by 120k+</div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">4.9★ rating</div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Lightning checkout</div>
+                </div>
+              </motion.div>
+
+              {/* RIGHT: compact search (draft inputs only) */}
+              <motion.div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur" style={{ transform: pPanel }}>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
+                  <Field icon={<MapPin className="size-4" />} label="Destination">
+                    <DestinationPicker value={city} onChange={setCity} />
+                  </Field>
+                  <Field icon={<Calendar className="size-4" />} label="Dates">
+                    <CalendarPopover value={dates} onChange={setDates} />
+                  </Field>
+                  <Field icon={<User className="size-4" />} label="Guests">
+                    <GuestsPopover value={guests} onChange={setGuests as any} />
+                  </Field>
+                  <Field label={<span className="sr-only">Search</span>}>
+                    <Button
+                      className="h-10 w-full text-sm rounded-xl relative overflow-hidden"
+                      onClick={onSearch}
+                    >
+                      <span className="relative z-10">Search</span>
+                      <span className="pointer-events-none absolute inset-0 translate-x-[-120%] bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] animate-[sheen_1.8s_linear_infinite]" />
+                    </Button>
+                  </Field>
+                </div>
+
+                <div className="mt-3 overflow-hidden rounded-xl border border-white/10">
+                  <div className="flex animate-[marquee_18s_linear_infinite] whitespace-nowrap text-[11px] md:text-xs [mask-image:linear-gradient(90deg,transparent,black_10%,black_90%,transparent)]">
+                    {Array.from({ length: 16 }).map((_, i) => (
+                      <span key={i} className="px-4 py-2 text-white/80">
+                        🔥 Doha Jazz Fest • 🏨 Skyline Luxe Deal • 🎟️ Rooftop Cinema • 🎤 Live Arena Tour • 🎭 Theatre Night
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </div>
+
+        <style>{`
+          @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes sheen { 0% { transform: translateX(-120%);} 100% { transform: translateX(120%);} }
+          @media (prefers-reduced-motion: reduce) {
+            .animate-[marquee_18s_linear_infinite] { animation: none !important; }
+            .animate-[spin_36s_linear_infinite], .animate-[spin_48s_linear_infinite_reverse] { animation: none !important; }
+          }
+        `}</style>
+      </div>
+    </section>
+  );
+}
+
 /* ------------------------------- PAGE -------------------------------------- */
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
@@ -1205,9 +1151,21 @@ export default function RedRouteLandingUltra() {
     });
   }, []);
 
-  // Controlled filters
-  const [cityFilter, setCityFilter] = useState("");
-  const [guestsFilter, setGuestsFilter] = useState<Guests>({ adults: 2, kids: 0 });
+  // ----- Draft (UI) state vs Applied (filter) state -----
+  const [cityDraft, setCityDraft] = useState("");
+  const [guestsDraft, setGuestsDraft] = useState<Guests>({ adults: 2, kids: 0 });
+  const [datesDraft, setDatesDraft] = useState<DatesState>({ start: null, end: null });
+
+  const [cityApplied, setCityApplied] = useState("");
+  const [guestsApplied, setGuestsApplied] = useState<Guests>({ adults: 0, kids: 0 }); // 0 = no capacity filter
+
+  // Commit filters + scroll
+  const doSearch = () => {
+    setCityApplied(cityDraft);
+    setGuestsApplied(guestsDraft);
+    const el = document.getElementById("featured");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+  };
 
   // Events state (single fetch used by both marquee + grid)
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -1260,11 +1218,20 @@ export default function RedRouteLandingUltra() {
         <LogOut className="size-4" /> Logout
       </button>
 
-      {/* Pass city + guests filters into Hero */}
-      <Hero city={cityFilter} setCity={setCityFilter} guests={guestsFilter} setGuests={setGuestsFilter} />
+      {/* HERO: pass drafts only; Search commits + scrolls */}
+      <Hero
+        city={cityDraft}
+        setCity={setCityDraft}
+        guests={guestsDraft}
+        setGuests={setGuestsDraft}
+        dates={datesDraft}
+        setDates={setDatesDraft}
+        onSearch={doSearch}
+      />
       <StatsStrip />
-      {/* Featured hotels (filtering by city + capacity) */}
-      <Featured cityFilter={cityFilter} guests={guestsFilter} />
+
+      {/* Featured hotels (filtered by *applied* values only) */}
+      <Featured cityFilter={cityApplied} guests={guestsApplied} />
 
       {/* DB-driven Ken Burns from events */}
       <KenBurnsShowcase events={events} />
