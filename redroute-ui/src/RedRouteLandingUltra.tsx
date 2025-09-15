@@ -1218,7 +1218,7 @@ export default function RedRouteLandingUltra() {
     (async () => {
       setEvLoading(true);
       try {
-        const r = await fetch("/api/events");
+        const r = await fetch("/api/events", { credentials: "include" });
         if (!r.ok) {
           const maybe = await r.json().catch(() => null);
           throw new Error(maybe?.error ?? `HTTP ${r.status}`);
