@@ -12,9 +12,10 @@ import SignIn from "./SignIn";
 import RedRouteLandingUltra from "./RedRouteLandingUltra";
 import SquareImage from "./components/SquareImage";
 import HotelDetail from "./HotelDetail";
-import Checkout from "./Checkout";            // ⟵ NEW
+import Checkout from "./Checkout";               // hotel checkout
+import EventDetail from "./EventDetail";         // event detail (public)
+import EventCheckout from "./EventCheckout";     // NEW: event checkout (authed)
 import { hasValidSession, clearSession } from "./session";
-import EventDetail from "./EventDetail";
 
 function RequireAuth() {
   const valid = hasValidSession();
@@ -43,14 +44,13 @@ export default function App() {
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<SignIn />} />
-        {/* Allow hotel detail without auth (your original behavior) */}
         <Route path="/hotels/:id" element={<HotelDetail />} />
         <Route path="/events/:id" element={<EventDetail />} />
-
 
         {/* Auth-gated routes */}
         <Route element={<RequireAuth />}>
           <Route path="/home" element={<RedRouteLandingUltra />} />
+
           <Route
             path="/square"
             element={
@@ -69,8 +69,12 @@ export default function App() {
               </div>
             }
           />
-          {/* NEW: Checkout is behind auth so payment/booking only happens for logged-in users */}
+
+          {/* Hotel checkout (existing) */}
           <Route path="/checkout" element={<Checkout />} />
+
+          {/* NEW: Event checkout (requires auth) */}
+          <Route path="/events/:id/checkout" element={<EventCheckout />} />
         </Route>
 
         {/* Misc */}

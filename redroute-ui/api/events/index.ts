@@ -1,13 +1,10 @@
 // api/events/index.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import prisma from "../_lib/prisma.js"; // keep .js for Vercel
+import prisma from "../_lib/prisma.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "GET") return res.status(405).json({ error: "Use GET" });
   try {
-    if (req.method !== "GET") {
-      return res.status(405).json({ error: "Use GET" });
-    }
-
     const events = await prisma.event.findMany({
       orderBy: { startsAt: "asc" },
       select: {
@@ -22,10 +19,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         imageAlt: true,
       },
     });
-
     return res.status(200).json(events);
-  } catch (err: any) {
-    console.error("GET /api/events error:", err);
+  } catch (err) {
+    console.error("events index error:", err);
     return res.status(500).json({ error: "Server error" });
   }
 }
