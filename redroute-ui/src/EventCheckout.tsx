@@ -170,37 +170,72 @@ export default function EventCheckout() {
 
   // ---- CONFETTI (full-screen canvas) ----
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const confettiIntervalRef = useRef<number | null>(null);
+
+  // Ensure the canvas matches the viewport (extra safety even with resize: true)
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const setSize = () => {
+      el.width = window.innerWidth;
+      el.height = window.innerHeight;
+    };
+    setSize();
+    window.addEventListener("resize", setSize);
+    return () => window.removeEventListener("resize", setSize);
+  }, []);
+
+  function stopConfetti() {
+    if (confettiIntervalRef.current != null) {
+      window.clearInterval(confettiIntervalRef.current);
+      confettiIntervalRef.current = null;
+    }
+  }
+
   function fireCelebration() {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    // Clear any previously running bursts
+    stopConfetti();
+
     const shoot = confetti.create(canvas, { resize: true, useWorker: true });
 
-    const duration = 2500;
+    // Immediate center burst so it’s obvious
+    shoot({ particleCount: 120, spread: 70, origin: { x: 0.5, y: 0.5 }, startVelocity: 55 });
+
+    const duration = 2600;
     const end = Date.now() + duration;
     const defaults = { startVelocity: 45, spread: 75, ticks: 250, scalar: 1 };
 
     const rand = (min: number, max: number) => Math.random() * (max - min) + min;
 
-    const interval = setInterval(() => {
+    // Repeating four-corner + edge sweeps
+    confettiIntervalRef.current = window.setInterval(() => {
       const timeLeft = end - Date.now();
       if (timeLeft <= 0) {
-        clearInterval(interval);
+        stopConfetti();
         return;
       }
 
       const particleCount = 40;
 
-      // Four corners
+      // Corners
       shoot({ ...defaults, particleCount, origin: { x: rand(0.00, 0.15), y: rand(0.00, 0.10) } }); // TL
       shoot({ ...defaults, particleCount, origin: { x: rand(0.85, 1.00), y: rand(0.00, 0.10) } }); // TR
       shoot({ ...defaults, particleCount, origin: { x: rand(0.00, 0.15), y: rand(0.90, 1.00) } }); // BL
       shoot({ ...defaults, particleCount, origin: { x: rand(0.85, 1.00), y: rand(0.90, 1.00) } }); // BR
 
-      // A couple sweeps from top & bottom for fullness
-      shoot({ ...defaults, particleCount: 20, spread: 120, origin: { x: rand(0.3, 0.7), y: 0 } });
-      shoot({ ...defaults, particleCount: 20, spread: 120, origin: { x: rand(0.3, 0.7), y: 1 } });
-    }, 180);
+      // Sweeps across top & bottom
+      shoot({ ...defaults, particleCount: 24, spread: 120, origin: { x: rand(0.25, 0.75), y: 0 } });
+      shoot({ ...defaults, particleCount: 24, spread: 120, origin: { x: rand(0.25, 0.75), y: 1 } });
+    }, 180) as unknown as number;
   }
+
+  // Cleanup any confetti timers when leaving the page
+  useEffect(() => {
+    return () => stopConfetti();
+  }, []);
 
   async function payAndBook() {
     try {
@@ -233,7 +268,7 @@ export default function EventCheckout() {
       setConfirmed(true);
       setMsg({ ok: true, text: "Payment successful! Your tickets are booked." });
 
-      // Confetti!
+      // Fire confetti AFTER state updates so the canvas is definitely mounted
       requestAnimationFrame(() => fireCelebration());
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
@@ -250,10 +285,21 @@ export default function EventCheckout() {
       {/* Full-screen confetti canvas overlay */}
       <canvas
         ref={canvasRef}
-        className="pointer-events-none fixed inset-0 z-[9998]"
-        style={{ width: "100vw", height: "100vh" }}
+        className="pointer-events-none fixed inset-0"
+        style={{ zIndex: 2147483647, width: "100vw", height: "100vh" }}
         aria-hidden="true"
       />
+
+      {/* Fixed Back-to-Home button (top-left) */}
+      <button
+        onClick={() => navigate("/home")}
+        className="fixed left-5 top-5 z-[2147483647] inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
+        aria-label="Back to home"
+        title="Back to home"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Home
+      </button>
 
       <div className="mx-auto max-w-4xl p-6">
         <button
@@ -311,7 +357,8 @@ export default function EventCheckout() {
                   <div>
                     <div className="text-lg font-semibold text-green-400">Tickets confirmed!</div>
                     <div className="text-white/85">
-                      You’re all set for <strong>{name}</strong> — {fmtEventWhen(when)} at <strong>{where}</strong>.
+                      You’re all set for <strong>{name}</strong> — {fmtEventWhen(when)} at{" "}
+                      <strong>{where}</strong>.
                       {booking?.contactEmail ? <> A confirmation was sent to <strong>{booking.contactEmail}</strong>.</> : null}
                     </div>
                     <div className="mt-3 grid gap-2 rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
