@@ -274,7 +274,7 @@ export default function HotelDetail() {
   const [checkOut, setCheckOut] = useState<string>(fmtDateYMD(plusDays(today, 3)));
   const [guests, setGuests] = useState<number>(2);
 
-  const [busy, setBusy] = useState(false);
+  const [busy] = useState(false);
   const [reserveMsg, setReserveMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
