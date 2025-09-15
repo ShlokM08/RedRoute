@@ -22,14 +22,13 @@ function authHeadersFrom(me: { id?: string | null; email?: string | null }) {
   return h;
 }
 
-/* ---------- date helpers (UTC to avoid DST issues) ---------- */
+/* ---------- date helpers (UTC) ---------- */
 function parseYMD(ymd: string) {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
 }
 const MS_PER_NIGHT = 24 * 60 * 60 * 1000;
 
-/* ---------- types ---------- */
 type CheckoutState = {
   hotelId: number;
   name?: string;
@@ -58,16 +57,16 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { state } = useLocation() as { state?: CheckoutState };
 
-  // 1) pull from router state
+  // 1) router state
   let initial: Partial<CheckoutState> = state ?? {};
-  // 2) else from sessionStorage
+  // 2) sessionStorage fallback
   if (!initial?.hotelId) {
     try {
       const saved = JSON.parse(sessionStorage.getItem("rr_checkout") || "null");
       if (saved && typeof saved === "object") initial = { ...saved, ...initial };
     } catch {}
   }
-  // 3) minimal query fallback
+  // 3) query params fallback
   const params = new URLSearchParams(location.search);
   if (!initial.hotelId && params.get("hotelId")) initial.hotelId = Number(params.get("hotelId"));
   initial.checkIn  = initial.checkIn  ?? params.get("checkIn")  ?? "";
@@ -90,61 +89,49 @@ export default function Checkout() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // stay-on-page confirmation state + saved booking
+  // confirmation state + saved booking
   const [confirmed, setConfirmed] = useState(false);
   const [booking, setBooking] = useState<CreatedBooking | null>(null);
 
-  /* -------- Confetti (canvas-confetti) -------- */
+  // ---- CONFETTI SETUP (full-screen canvas) ----
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const timersRef = useRef<number[]>([]);
 
-  // Fire a four-corner celebration then resolve
-  function runConfetti(duration = 1800): Promise<void> {
-    if (!canvasRef.current) return Promise.resolve();
-    const my = confetti.create(canvasRef.current, { resize: true, useWorker: true });
+  function fireCelebration() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const shoot = confetti.create(canvas, { resize: true, useWorker: true });
+
+    const duration = 2500; // ms
     const end = Date.now() + duration;
+    const defaults = { startVelocity: 45, spread: 75, ticks: 250, scalar: 1 };
 
-    return new Promise<void>((resolve) => {
-      function frame() {
-        const timeLeft = end - Date.now();
-        if (timeLeft <= 0) {
-          resolve();
-          return;
-        }
-        const base = Math.max(12, Math.floor(28 * (timeLeft / duration)));
-        const opts = {
-          startVelocity: 52,
-          ticks: 160,
-          spread: 70,
-          gravity: 0.9,
-          scalar: 1,
-          zIndex: 10000,
-        };
+    const rand = (min: number, max: number) => Math.random() * (max - min) + min;
 
-        // bottom-left → up-right
-        my({ ...opts, particleCount: base, angle: 60,  origin: { x: 0.02, y: 1.00 } });
-        // bottom-right → up-left
-        my({ ...opts, particleCount: base, angle: 120, origin: { x: 0.98, y: 1.00 } });
-        // top-left → down-right
-        my({ ...opts, particleCount: base, angle: 300, origin: { x: 0.02, y: 0.00 } });
-        // top-right → down-left
-        my({ ...opts, particleCount: base, angle: 240, origin: { x: 0.98, y: 0.00 } });
-
-        timersRef.current.push(window.setTimeout(frame, 140));
+    const interval = setInterval(() => {
+      const timeLeft = end - Date.now();
+      if (timeLeft <= 0) {
+        clearInterval(interval);
+        return;
       }
-      frame();
-    });
+
+      const particleCount = 40;
+
+      // Top-left
+      shoot({ ...defaults, particleCount, origin: { x: rand(0.00, 0.15), y: rand(0.00, 0.10) } });
+      // Top-right
+      shoot({ ...defaults, particleCount, origin: { x: rand(0.85, 1.00), y: rand(0.00, 0.10) } });
+      // Bottom-left
+      shoot({ ...defaults, particleCount, origin: { x: rand(0.00, 0.15), y: rand(0.90, 1.00) } });
+      // Bottom-right
+      shoot({ ...defaults, particleCount, origin: { x: rand(0.85, 1.00), y: rand(0.90, 1.00) } });
+
+      // A few edge sweeps for fullness
+      shoot({ ...defaults, particleCount: 20, spread: 120, origin: { x: rand(0.3, 0.7), y: 0 } });
+      shoot({ ...defaults, particleCount: 20, spread: 120, origin: { x: rand(0.3, 0.7), y: 1 } });
+    }, 180);
   }
 
-  // cleanup timers/canvas on unmount
-  useEffect(() => {
-    return () => {
-      timersRef.current.forEach((t) => clearTimeout(t));
-      timersRef.current = [];
-    };
-  }, []);
-
-  /* -------- data prefill -------- */
+  // fetch hotel if missing price/name
   useEffect(() => {
     (async () => {
       if (!hotelId) return;
@@ -161,6 +148,7 @@ export default function Checkout() {
     })();
   }, [hotelId, name, price]);
 
+  // fetch me for contact + headers
   const [me, setMe] = useState<{ id?: string | null; email?: string | null } | null>(null);
   useEffect(() => {
     (async () => {
@@ -174,7 +162,7 @@ export default function Checkout() {
     })();
   }, []);
 
-  // compute nights safely (min 1)
+  // compute nights
   const nights = useMemo(() => {
     if (!checkIn || !checkOut) return 0;
     const n = Math.round((+parseYMD(checkOut) - +parseYMD(checkIn)) / MS_PER_NIGHT);
@@ -198,10 +186,7 @@ export default function Checkout() {
 
       const r = await fetch("/api/bookings", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeadersFrom(me),
-        },
+        headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
         credentials: "include",
         body: JSON.stringify({
           hotelId,
@@ -217,13 +202,12 @@ export default function Checkout() {
       const payload = raw ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : null;
       if (!r.ok) throw new Error(payload?.error || `Payment/booking failed (HTTP ${r.status})`);
 
-      // Save booking
       setBooking(payload?.booking ?? null);
-
-      // Confetti first, then show confirmation panel (stays on page)
-      await runConfetti(1800);
       setConfirmed(true);
       setMsg({ ok: true, text: "Payment successful! Your booking is confirmed." });
+
+      // FIRE THE FULL-SCREEN CONFETTI
+      requestAnimationFrame(() => fireCelebration());
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
     } finally {
@@ -232,18 +216,19 @@ export default function Checkout() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Fullscreen confetti canvas (only in DOM when needed) */}
+    <div className="min-h-screen bg-black text-white relative">
+      {/* Full-screen confetti canvas overlay */}
       <canvas
         ref={canvasRef}
-        className="fixed inset-0 pointer-events-none z-[9999]"
-        style={{ display: "block" }}
+        className="pointer-events-none fixed inset-0 z-[9998]"
+        style={{ width: "100vw", height: "100vh" }}
+        aria-hidden="true"
       />
 
       <div className="mx-auto max-w-4xl p-6">
         <button
           onClick={() => navigate(-1)}
-          className="mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20 disabled:opacity-60"
+          className="mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
           disabled={busy}
         >
           <ChevronLeft className="h-4 w-4" /> Back
@@ -274,9 +259,7 @@ export default function Checkout() {
             <div className="mt-5 rounded-xl border border-white/10 bg-black/30 p-4">
               <div className="flex items-center justify-between text-sm">
                 <span>
-                  {price != null
-                    ? `$${price} × ${nights} night${nights !== 1 ? "s" : ""}`
-                    : "Price"}
+                  {price != null ? `$${price} × ${nights} night${nights !== 1 ? "s" : ""}` : "Price"}
                 </span>
                 <span className="font-semibold">${subtotal.toLocaleString()}</span>
               </div>
@@ -292,15 +275,13 @@ export default function Checkout() {
               </div>
             )}
 
-            {/* Confirmation panel */}
+            {/* Confirmation panel (no redirect) */}
             {confirmed && (
               <div className="mt-5 rounded-2xl border border-green-600/30 bg-green-600/15 p-4">
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" />
                   <div>
-                    <div className="text-lg font-semibold text-green-400">
-                      Booking confirmed!
-                    </div>
+                    <div className="text-lg font-semibold text-green-400">Booking confirmed!</div>
                     <div className="text-white/85">
                       You’re all set for <strong>{name}</strong>. We’ve saved your booking
                       details {booking?.contactEmail ? <>and sent a confirmation to <strong>{booking.contactEmail}</strong></> : null}.
