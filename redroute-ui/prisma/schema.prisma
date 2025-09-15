@@ -59,6 +59,7 @@ model Booking {
   guests       Int      @default(1)     // number of guests staying
   contactName  String?                  // optional: person making the booking
   contactEmail String?                  // optional: email for confirmation
+  totalCost    Int      @default(0) 
 
   createdAt    DateTime @default(now())
 }
