@@ -14,6 +14,7 @@ import SquareImage from "./components/SquareImage";
 import HotelDetail from "./HotelDetail";
 import Checkout from "./Checkout";            // ⟵ NEW
 import { hasValidSession, clearSession } from "./session";
+import EventDetail from "./EventDetail";
 
 function RequireAuth() {
   const valid = hasValidSession();
@@ -44,6 +45,8 @@ export default function App() {
         <Route path="/login" element={<SignIn />} />
         {/* Allow hotel detail without auth (your original behavior) */}
         <Route path="/hotels/:id" element={<HotelDetail />} />
+        <Route path="/events/:id" element={<EventDetail />} />
+
 
         {/* Auth-gated routes */}
         <Route element={<RequireAuth />}>

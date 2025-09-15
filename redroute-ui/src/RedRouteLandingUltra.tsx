@@ -31,66 +31,15 @@ import {
   Plus,
 } from "lucide-react";
 
-/* --------------------- cookie helpers --------------------- */
+/* --------------------- cookie helpers (kept) --------------------- */
 function setCookie(name: string, value: string, days = 7) {
   const maxAge = `Max-Age=${days * 24 * 60 * 60}`;
   const sameSite = "SameSite=Lax";
-  const secure =
-    typeof window !== "undefined" && window.location.protocol === "https:" ? " Secure" : "";
-  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(
-    value
-  )}; Path=/; ${maxAge}; ${sameSite};${secure}`;
+  const secure = typeof window !== "undefined" && window.location.protocol === "https:" ? " Secure" : "";
+  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; Path=/; ${maxAge}; ${sameSite};${secure}`;
 }
 function deleteCookie(name: string) {
   document.cookie = `${encodeURIComponent(name)}=; Path=/; Max-Age=0; SameSite=Lax`;
-}
-
-/* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
-function KenBurnsShowcase() {
-  const slides = [
-    { img: "/images/event_arena.jpeg", title: "Arena Night: The Tour"},
-    { img: "/images/event_rooftop.png", title: "Rooftop Cinema"  },
-    { img: "/images/event_theatre.jpg", title: "Old Town Theatre" },
-    { img: "/images/jazz_concert.jpg", title: "Jazz Under The Stars" },
-    { img: "/images/citylights_fest.jpeg", title: "City Lights Festival" },
-    { img: "/images/tech_expo.jpeg", title: "Tech Expo Live" },
-    { img: "/images/summer_party.jpeg", title: "Summer Beats Block Party" },
-
-
-  ];
-  const seq = [...slides, ...slides];
-
-  return (
-    <section className="px-6 pb-16 text-white">
-      <div className="mx-auto max-w-7xl overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-        <div className="relative flex animate-[kbmarquee_30s_linear_infinite]">
-          {seq.map((s, i) => (
-            <div key={i} className="relative h-56 min-w-[70%] md:h-72 md:min-w-[40%] overflow-hidden">
-              <motion.img
-                src={s.img}
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg";
-                }}
-                alt={s.title}
-                className="absolute inset-0 h-full w-full object-cover"
-                initial={{ scale: 1.05, x: 0 }}
-                whileInView={{ scale: 1.18, x: 15 }}
-                transition={{ duration: 10, ease: "linear" }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/0" />
-              <div className="absolute bottom-3 left-4">
-                <div className="text-xl font-semibold">{s.title}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <style>{`
-        @keyframes kbmarquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
-        @media (prefers-reduced-motion: reduce) { .animate-[kbmarquee_30s_linear_infinite]{animation:none} }
-      `}</style>
-    </section>
-  );
 }
 
 const RR = { red: "#E50914" } as const;
@@ -166,10 +115,7 @@ function TiltCard({ children }: { children: React.ReactNode }) {
     ry.set(clamp((x - 0.5) * 16, -8, 8));
     rx.set(clamp(-(y - 0.5) * 16, -8, 8));
   }
-  function onLeave() {
-    rx.set(0);
-    ry.set(0);
-  }
+  function onLeave() { rx.set(0); ry.set(0); }
 
   return (
     <motion.div
@@ -244,7 +190,7 @@ const isWithin = (d: Date, a: Date | null, b: Date | null) => {
 const fmtShort = (d: Date) =>
   d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-/* ------------------------ INPUT PRIMITIVE (used by picker) ------------------ */
+/* ------------------------ INPUT PRIMITIVE ------------------ */
 function PillInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
@@ -258,7 +204,7 @@ function PillInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
-/* ------------------------ DESTINATION PICKER (autocomplete) ---------------- */
+/* ------------------------ DESTINATION PICKER ---------------- */
 type Destination = {
   id: string;
   label: string;
@@ -269,21 +215,21 @@ type Destination = {
 };
 
 const DESTINATIONS: Destination[] = [
-  { id: "doha", label: "Doha, Qatar", meta: "Popular • Middle East", emoji: "🏜️", group: "Popular", tokens: "doha qatar middle east" },
-  { id: "dubai", label: "Dubai, UAE", meta: "Popular • Middle East", emoji: "🏙️", group: "Popular", tokens: "dubai uae united arab emirates middle east" },
-  { id: "paris", label: "Paris, France", meta: "Popular • Europe", emoji: "🗼", group: "Popular", tokens: "paris france europe" },
-  { id: "bali", label: "Bali, Indonesia", meta: "Popular • Asia", emoji: "🏖️", group: "Popular", tokens: "bali indonesia asia denpasar" },
-  { id: "london", label: "London, United Kingdom", meta: "Popular • Europe", emoji: "🎡", group: "Popular", tokens: "london uk united kingdom england europe" },
-  { id: "rome", label: "Rome, Italy", meta: "City • Europe", emoji: "🏛️", group: "Cities", tokens: "rome italy europe" },
-  { id: "barcelona", label: "Barcelona, Spain", meta: "City • Europe", emoji: "🏖️", group: "Cities", tokens: "barcelona spain europe" },
-  { id: "istanbul", label: "Istanbul, Türkiye", meta: "City • Europe/Asia", emoji: "🕌", group: "Cities", tokens: "istanbul turkey türkiye eurasia" },
-  { id: "newyork", label: "New York, USA", meta: "City • North America", emoji: "🗽", group: "Cities", tokens: "new york nyc usa united states america" },
-  { id: "tokyo", label: "Tokyo, Japan", meta: "City • Asia", emoji: "🏮", group: "Cities", tokens: "tokyo japan asia" },
-  { id: "amalfi", label: "Amalfi Coast, Italy", meta: "Region • Europe", emoji: "🌊", group: "Regions", tokens: "amalfi coast italy europe" },
-  { id: "alps", label: "Swiss Alps, Switzerland", meta: "Region • Europe", emoji: "🏔️", group: "Regions", tokens: "swiss alps switzerland europe mountains" },
-  { id: "riviera", label: "French Riviera, France", meta: "Region • Europe", emoji: "🌞", group: "Regions", tokens: "french riviera cote d azur france europe nice cannes monaco" },
-  { id: "bavaria", label: "Bavaria, Germany", meta: "Region • Europe", emoji: "🏰", group: "Regions", tokens: "bavaria germany europe munich" },
-  { id: "maldives", label: "Maldives", meta: "Region • Indian Ocean", emoji: "🏝️", group: "Regions", tokens: "maldives indian ocean resort islands" },
+  { id: "doha",     label: "Doha, Qatar",            meta: "Popular • Middle East", emoji: "🏜️", group: "Popular", tokens: "doha qatar middle east" },
+  { id: "dubai",    label: "Dubai, UAE",             meta: "Popular • Middle East", emoji: "🏙️", group: "Popular", tokens: "dubai uae united arab emirates middle east" },
+  { id: "paris",    label: "Paris, France",          meta: "Popular • Europe",      emoji: "🗼", group: "Popular", tokens: "paris france europe" },
+  { id: "bali",     label: "Bali, Indonesia",        meta: "Popular • Asia",        emoji: "🏖️", group: "Popular", tokens: "bali indonesia asia denpasar" },
+  { id: "london",   label: "London, United Kingdom", meta: "Popular • Europe",      emoji: "🎡", group: "Popular", tokens: "london uk united kingdom england europe" },
+  { id: "rome",     label: "Rome, Italy",            meta: "City • Europe",  emoji: "🏛️", group: "Cities",  tokens: "rome italy europe" },
+  { id: "barcelona",label: "Barcelona, Spain",       meta: "City • Europe",  emoji: "🏖️", group: "Cities",  tokens: "barcelona spain europe" },
+  { id: "istanbul", label: "Istanbul, Türkiye",      meta: "City • Europe/Asia", emoji: "🕌", group: "Cities", tokens: "istanbul turkey türkiye eurasia" },
+  { id: "newyork",  label: "New York, USA",          meta: "City • North America", emoji: "🗽", group: "Cities", tokens: "new york nyc usa united states america" },
+  { id: "tokyo",    label: "Tokyo, Japan",           meta: "City • Asia",    emoji: "🏮", group: "Cities",  tokens: "tokyo japan asia" },
+  { id: "amalfi",   label: "Amalfi Coast, Italy",    meta: "Region • Europe", emoji: "🌊", group: "Regions", tokens: "amalfi coast italy europe" },
+  { id: "alps",     label: "Swiss Alps, Switzerland",meta: "Region • Europe", emoji: "🏔️", group: "Regions", tokens: "swiss alps switzerland europe mountains" },
+  { id: "riviera",  label: "French Riviera, France", meta: "Region • Europe", emoji: "🌞", group: "Regions", tokens: "french riviera cote d azur france europe nice cannes monaco" },
+  { id: "bavaria",  label: "Bavaria, Germany",       meta: "Region • Europe", emoji: "🏰", group: "Regions", tokens: "bavaria germany europe munich" },
+  { id: "maldives", label: "Maldives",               meta: "Region • Indian Ocean", emoji: "🏝️", group: "Regions", tokens: "maldives indian ocean resort islands" },
 ];
 
 function normalize(s: string) {
@@ -317,10 +263,7 @@ function DestinationPicker({
 
   useEffect(() => {
     if (!open) return;
-    if (filtered.length === 0) {
-      setActive(null);
-      return;
-    }
+    if (filtered.length === 0) { setActive(null); return; }
     const current = filtered.find((d) => d.id === active);
     if (!current) setActive(filtered[0].id);
   }, [open, filtered, active]);
@@ -338,20 +281,14 @@ function DestinationPicker({
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      if (!open) {
-        setOpen(true);
-        return;
-      }
+      if (!open) { setOpen(true); return; }
       const idx = filtered.findIndex((d) => d.id === active);
       const next = filtered[Math.min(idx + 1, filtered.length - 1)];
       if (next) setActive(next.id);
       scrollIntoView(next?.id);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      if (!open) {
-        setOpen(true);
-        return;
-      }
+      if (!open) { setOpen(true); return; }
       const idx = filtered.findIndex((d) => d.id === active);
       const prev = filtered[Math.max(idx - 1, 0)];
       if (prev) setActive(prev.id);
@@ -366,10 +303,7 @@ function DestinationPicker({
         setOpen(false);
       }
     } else if (e.key === "Escape") {
-      if (open) {
-        e.preventDefault();
-        setOpen(false);
-      }
+      if (open) { e.preventDefault(); setOpen(false); }
     }
   }
 
@@ -394,10 +328,7 @@ function DestinationPicker({
         aria-activedescendant={active ? `dest-${active}` : undefined}
         placeholder="Where to?"
         value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setOpen(true);
-        }}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
         autoComplete="off"
@@ -456,9 +387,7 @@ function DestinationPicker({
               );
             })}
             {filtered.length === 0 && (
-              <div className="px-4 py-6 text-sm text-white/70">
-                No matches. Try a city, country, or region.
-              </div>
+              <div className="px-4 py-6 text-sm text-white/70">No matches. Try a city, country, or region.</div>
             )}
           </motion.div>
         )}
@@ -502,38 +431,17 @@ function GuestsPopover({
   }, [open]);
 
   function bump(key: keyof Guests, delta: number) {
-    let next: Guests = {
-      adults: value.adults,
-      kids: value.kids,
-    };
-
-    if (key === "adults") {
-      next.adults = Math.max(MIN_ADULTS, value.adults + delta);
-    } else {
-      next.kids = Math.max(0, value.kids + delta);
-    }
-
+    let next: Guests = { adults: value.adults, kids: value.kids };
+    if (key === "adults") next.adults = Math.max(MIN_ADULTS, value.adults + delta);
+    else next.kids = Math.max(0, value.kids + delta);
     if (next.adults + next.kids > MAX_TOTAL) return;
-
     onChange(next);
   }
 
-  function Row({
-    title,
-    note,
-    value,
-    onMinus,
-    onPlus,
-    disabledMinus,
-    disabledPlus,
-  }: {
-    title: string;
-    note?: string;
-    value: number;
-    onMinus: () => void;
-    onPlus: () => void;
-    disabledMinus?: boolean;
-    disabledPlus?: boolean;
+  function Row({ title, note, value, onMinus, onPlus, disabledMinus, disabledPlus }: {
+    title: string; note?: string; value: number;
+    onMinus: () => void; onPlus: () => void;
+    disabledMinus?: boolean; disabledPlus?: boolean;
   }) {
     return (
       <div className="flex items-center justify-between gap-4 py-2">
@@ -614,7 +522,11 @@ function GuestsPopover({
               >
                 Reset
               </button>
-              <Button className="h-9 rounded-xl px-4 text-sm" onClick={() => setOpen(false)} style={{ background: RR.red }}>
+              <Button
+                className="h-9 rounded-xl px-4 text-sm"
+                onClick={() => setOpen(false)}
+                style={{ background: RR.red }}
+              >
                 Done
               </Button>
             </div>
@@ -642,17 +554,11 @@ function CalendarPopover() {
 
   const onPrev = () => {
     const m = viewM - 1;
-    if (m < 0) {
-      setViewM(11);
-      setViewY((y) => y - 1);
-    } else setViewM(m);
+    if (m < 0) { setViewM(11); setViewY((y) => y - 1); } else setViewM(m);
   };
   const onNext = () => {
     const m = viewM + 1;
-    if (m > 11) {
-      setViewM(0);
-      setViewY((y) => y + 1);
-    } else setViewM(m);
+    if (m > 11) { setViewM(0); setViewY((y) => y + 1); } else setViewM(m);
   };
 
   const onPick = (d: Date) => {
@@ -666,13 +572,22 @@ function CalendarPopover() {
   };
 
   const label =
-    start && end ? `${fmtShort(start)} — ${fmtShort(end)}` : start ? `${fmtShort(start)} — …` : "";
+    start && end
+      ? `${fmtShort(start)} — ${fmtShort(end)}`
+      : start
+      ? `${fmtShort(start)} — …`
+      : "";
 
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (!open) return;
       const t = e.target as Node;
-      if (popRef.current && !popRef.current.contains(t) && anchorRef.current && !anchorRef.current.contains(t)) {
+      if (
+        popRef.current &&
+        !popRef.current.contains(t) &&
+        anchorRef.current &&
+        !anchorRef.current.contains(t)
+      ) {
         setOpen(false);
       }
     }
@@ -730,11 +645,7 @@ function CalendarPopover() {
 
             <div className="px-3 py-2">
               <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
-                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-                  <div key={d} className="py-1">
-                    {d}
-                  </div>
-                ))}
+                {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d) => (<div key={d} className="py-1">{d}</div>))}
               </div>
 
               <div className="grid grid-cols-7 gap-1">
@@ -764,13 +675,7 @@ function CalendarPopover() {
 
               <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-white/60">
                 <span>Pick start, then end</span>
-                <button
-                  className="underline hover:text-white"
-                  onClick={() => {
-                    setStart(null);
-                    setEnd(null);
-                  }}
-                >
+                <button className="underline hover:text-white" onClick={() => { setStart(null); setEnd(null); }}>
                   Clear
                 </button>
               </div>
@@ -779,87 +684,6 @@ function CalendarPopover() {
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-function Testimonials() {
-  const quotes = [
-    {
-      name: "Aman Mehra",
-      role: "Product Lead",
-      text: "RedRoute feels like a movie trailer — fast, beautiful, and I’m checked out in seconds.",
-      initials: "AM",
-      rating: 5,
-    },
-    {
-      name: "Sara Khan",
-      role: "Event Planner",
-      text: "Searching hotels + events in one flow is brilliant. The micro-interactions are 👌",
-      initials: "SK",
-      rating: 5,
-    },
-  ];
-  return (
-    <section className="px-6 pb-16 text-white">
-      <div className="mx-auto max-w-7xl">
-        <h2 className="mb-6 text-3xl font-bold">What people say</h2>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {quotes.map((q) => (
-            <div key={q.name} className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
-              <div className="flex items-start gap-4">
-                <div className="grid h-12 w-12 place-items-center rounded-full bg-white/15 text-sm font-semibold">
-                  {q.initials}
-                </div>
-                <div className="flex-1">
-                  <div className="mb-2 flex gap-1 text-white/90">
-                    {Array.from({ length: q.rating }).map((_, i) => (
-                      <Star key={i} className="h-4 w-4 fill-white/90" />
-                    ))}
-                  </div>
-                  <p className="text-white/85">{q.text}</p>
-                  <div className="mt-3 text-sm text-white/70">
-                    {q.name} • {q.role}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SiteFooter() {
-  const year = new Date().getFullYear();
-  return (
-    <footer className="px-6 pb-16 pt-10 text-white">
-      <div className="mx-auto max-w-7xl rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
-        <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-          <div>
-            <div className="text-2xl font-black">RedRoute</div>
-            <div className="text-white/70">Hotels • Events • Experiences</div>
-          </div>
-          <nav className="flex gap-6 text-sm text-white/80">
-            <a href="#" className="hover:text-white">
-              About
-            </a>
-            <a href="#" className="hover:text-white">
-              Careers
-            </a>
-            <a href="#" className="hover:text-white">
-              Help
-            </a>
-            <a href="#" className="hover:text-white">
-              Privacy
-            </a>
-          </nav>
-        </div>
-        <div className="mt-6 border-t border-white/10 pt-4 text-sm text-white/60">
-          © {year} RedRoute. All rights reserved.
-        </div>
-      </div>
-    </footer>
   );
 }
 
@@ -875,20 +699,16 @@ function Hero({
   guests: Guests;
   setGuests: (g: Guests | ((prev: Guests) => Guests)) => void;
 }) {
+  // cursor glow & parallax (kept)
   const mx = useMotionValue(0.5);
   const my = useMotionValue(0.5);
-  const pTitle = useTransform(
-    [mx, my],
-    ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`
-  );
-  const pPanel = useTransform(
-    [mx, my],
-    ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`
-  );
+  const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
+  const pPanel = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
 
   const glowX = useTransform(mx, (v) => `${v * 100}%`);
   const glowY = useTransform(my, (v) => `${v * 100}%`);
 
+  // Personalized headline
   const [firstName, setFirstName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -988,7 +808,10 @@ function Hero({
                     <GuestsPopover value={guests} onChange={setGuests as any} />
                   </Field>
                   <Field label={<span className="sr-only">Search</span>}>
-                    <Button className="h-10 w-full text-sm rounded-xl relative overflow-hidden" onClick={scrollToFeatured}>
+                    <Button
+                      className="h-10 w-full text-sm rounded-xl relative overflow-hidden"
+                      onClick={scrollToFeatured}
+                    >
                       <span className="relative z-10">Search</span>
                       <span className="pointer-events-none absolute inset-0 translate-x-[-120%] bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] animate-[sheen_1.8s_linear_infinite]" />
                     </Button>
@@ -1035,10 +858,7 @@ function MagneticButton() {
     x.set(clamp(dx * 0.2, -12, 12));
     y.set(clamp(dy * 0.2, -10, 10));
   }
-  function onLeave() {
-    x.set(0);
-    y.set(0);
-  }
+  function onLeave() { x.set(0); y.set(0); }
 
   return (
     <motion.button
@@ -1088,18 +908,9 @@ function StatsStrip() {
             <div className="grid place-items-center rounded-xl bg-white/10 p-2">{it.icon}</div>
             <div>
               <div className="text-xl font-bold">
-                {it.label.includes("rating") ? (
-                  <>
-                    <CountUp value={it.value} />★
-                  </>
-                ) : it.label.includes("time") ? (
-                  <>
-                    <CountUp value={it.value} />
-                    s
-                  </>
-                ) : (
-                  <CountUp value={it.value} />
-                )}
+                {it.label.includes("rating") ? (<><CountUp value={it.value} />★</>) :
+                 it.label.includes("time") ? (<><CountUp value={it.value} />s</>) :
+                 (<CountUp value={it.value} />)}
               </div>
               <div className="text-xs text-white/70">{it.label}</div>
             </div>
@@ -1153,7 +964,10 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
     const totalGuests = (guests?.adults ?? 0) + (guests?.kids ?? 0);
     return items.filter((h) => {
       const cityOk = q ? h.city?.toLowerCase().includes(q) : true;
-      const capOk = totalGuests > 0 && h.capacity != null ? h.capacity >= totalGuests : true;
+      const capOk =
+        totalGuests > 0 && h.capacity != null
+          ? h.capacity >= totalGuests
+          : true;
       return cityOk && capOk;
     });
   }, [items, cityFilter, guests]);
@@ -1164,7 +978,7 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
         <h2 className="text-3xl font-bold">Featured Stays</h2>
         <p className="text-white/70 mb-6">
           Cinematic tilt, parallax, and glow
-          {(guests.adults + guests.kids > 0) && ` • showing stays for ${guests.adults + guests.kids} guests`}
+          {((guests.adults + guests.kids) > 0) && ` • showing stays for ${guests.adults + guests.kids} guests`}
           {cityFilter && ` • in ${cityFilter}`}
           .
         </p>
@@ -1177,7 +991,11 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
           </div>
         )}
 
-        {!loading && error && <div className="mt-2 text-red-400 text-base">Couldn’t load hotels: {error}</div>}
+        {!loading && error && (
+          <div className="mt-2 text-red-400 text-base">
+            Couldn’t load hotels: {error}
+          </div>
+        )}
 
         {!loading && !error && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -1198,7 +1016,9 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
                       loading="lazy"
                     />
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                    <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">{h.city}</div>
+                    <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">
+                      {h.city}
+                    </div>
                   </div>
 
                   <div className="p-4">
@@ -1233,55 +1053,115 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
   );
 }
 
-/* ----------------------------- Events (Dynamic) ---------------------------- */
-type EventRow = {
+/* ----------------------------- Events (DB-driven) -------------------------- */
+type EventItem = {
   id: number;
   name: string;
   description: string;
   location: string;
-  startsAt: string; // ISO from API
+  startsAt: string;
   price: number;
   capacity: number;
   imageUrl: string;
   imageAlt?: string | null;
 };
 
-function fmtEventWhen(iso: string) {
-  // Localize for the user's browser/OS. If you want Qatar always, pass timeZone: "Asia/Qatar".
+function formatWhen(iso: string) {
   const d = new Date(iso);
-  const day = d.toLocaleDateString(undefined, { weekday: "short" });
   const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  return `${day} • ${date} • ${time}`;
+  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return `${date} • ${time}`;
 }
 
-function EventsGrid() {
+/* Ken Burns marquee now takes events from DB */
+function KenBurnsShowcase({ events }: { events: EventItem[] }) {
+  const slides = (events ?? [])
+    .slice(0, 8)
+    .map((e) => ({
+      img: e.imageUrl,
+      title: e.name,
+      sub: `${e.location} • ${formatWhen(e.startsAt)}`,
+    }));
+
+  const seq = slides.length > 0 ? [...slides, ...slides] : [];
+
+  if (seq.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="px-6 pb-16 text-white">
+      <div className="mx-auto max-w-7xl overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+        <div className="relative flex animate-[kbmarquee_30s_linear_infinite]">
+          {seq.map((s, i) => (
+            <div key={i} className="relative h-56 min-w-[70%] md:h-72 md:min-w-[40%] overflow-hidden">
+              <motion.img
+                src={s.img}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg"; }}
+                alt={s.title}
+                className="absolute inset-0 h-full w-full object-cover"
+                initial={{ scale: 1.05, x: 0 }}
+                whileInView={{ scale: 1.18, x: 15 }}
+                transition={{ duration: 10, ease: "linear" }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/0" />
+              <div className="absolute bottom-3 left-4">
+                <div className="text-sm text-white/80">{s.sub}</div>
+                <div className="text-xl font-semibold">{s.title}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <style>{`
+        @keyframes kbmarquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+        @media (prefers-reduced-motion: reduce) { .animate-[kbmarquee_30s_linear_infinite]{animation:none} }
+      `}</style>
+    </section>
+  );
+}
+
+/* Inline EventCard for the grid */
+function EventCard({ ev }: { ev: EventItem }) {
   const navigate = useNavigate();
-  const [events, setEvents] = useState<EventRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const when = formatWhen(ev.startsAt);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const r = await fetch("/api/events", { credentials: "include" });
-        if (!r.ok) {
-          const maybe = await r.json().catch(() => null);
-          throw new Error(maybe?.error ?? `HTTP ${r.status}`);
-        }
-        const data: EventRow[] = await r.json();
-        // optional: sort by startsAt asc
-        data.sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
-        setEvents(data);
-      } catch (e: any) {
-        setErr(e?.message || "Failed to load events");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  return (
+    <article
+      className="group overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm cursor-pointer hover:brightness-110 transition"
+      onClick={() => navigate(`/events/${ev.id}`)}
+      title={`View details for ${ev.name}`}
+    >
+      <div className="relative h-60 w-full overflow-hidden">
+        <img
+          src={ev.imageUrl || "/images/fallback.jpg"}
+          alt={ev.imageAlt ?? ev.name}
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          loading="lazy"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+        <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">{ev.location}</div>
+      </div>
 
+      <div className="p-4 text-white">
+        <div className="flex items-start justify-between gap-3">
+          <div className="pr-4">
+            <h3 className="text-lg font-semibold">{ev.name}</h3>
+            <div className="mt-1 text-sm text-white/80">{when}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-xl font-bold">${ev.price}</div>
+            <div className="text-xs text-white/60">per ticket</div>
+          </div>
+        </div>
+        <div className="mt-3 line-clamp-2 text-sm text-white/80">{ev.description}</div>
+      </div>
+    </article>
+  );
+}
+
+/* Events grid fed from DB */
+function EventStrip({ events, loading, error }: { events: EventItem[]; loading: boolean; error: string | null }) {
   return (
     <section className="px-6 pb-24 text-white">
       <div className="mx-auto max-w-7xl">
@@ -1293,54 +1173,18 @@ function EventsGrid() {
         {loading && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-60 rounded-3xl border border-white/10 bg-white/5 animate-pulse" />
+              <div key={i} className="h-60 rounded-2xl bg-white/5 animate-pulse border border-white/10" />
             ))}
           </div>
         )}
 
-        {!loading && err && (
-          <div className="text-red-400 text-base">Couldn’t load events: {err}</div>
+        {!loading && error && (
+          <div className="text-red-400">Couldn’t load events: {error}</div>
         )}
 
-        {!loading && !err && (
+        {!loading && !error && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            {events.map((e) => (
-              <TiltCard key={e.id}>
-                <motion.button
-                  type="button"
-                  onClick={() => navigate(`/events/${e.id}`)}
-                  className="group relative block w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 text-left"
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  title={`View details for ${e.name}`}
-                >
-                  <motion.img
-                    src={e.imageUrl || "/images/fallback.jpg"}
-                    onError={(img) => {
-                      (img.currentTarget as HTMLImageElement).src = "/images/fallback.jpg";
-                    }}
-                    alt={e.imageAlt ?? e.name}
-                    className="h-60 w-full object-cover"
-                    whileHover={{ scale: 1.1, filter: "blur(1px)" }}
-                    transition={{ duration: 0.6 }}
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/0" />
-                  <div className="absolute inset-x-4 bottom-4">
-                    <div className="text-sm text-white/70">
-                      {fmtEventWhen(e.startsAt)} • {e.location}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="text-xl font-semibold">{e.name}</div>
-                      <div className="rounded-full bg-black/60 px-3 py-1 text-xs">
-                        From ${e.price}
-                      </div>
-                    </div>
-                  </div>
-                </motion.button>
-              </TiltCard>
-            ))}
+            {events.map((e) => <EventCard key={e.id} ev={e} />)}
           </div>
         )}
       </div>
@@ -1352,18 +1196,42 @@ function EventsGrid() {
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
 
+  // Stop any videos from earlier pages
   useEffect(() => {
     document.querySelectorAll<HTMLVideoElement>("video").forEach((v) => {
       v.pause();
       v.removeAttribute("src");
-      try {
-        v.load();
-      } catch {}
+      try { v.load(); } catch {}
     });
   }, []);
 
+  // Controlled filters
   const [cityFilter, setCityFilter] = useState("");
   const [guestsFilter, setGuestsFilter] = useState<Guests>({ adults: 2, kids: 0 });
+
+  // Events state (single fetch used by both marquee + grid)
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [evLoading, setEvLoading] = useState(true);
+  const [evError, setEvError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setEvLoading(true);
+      try {
+        const r = await fetch("/api/events");
+        if (!r.ok) {
+          const maybe = await r.json().catch(() => null);
+          throw new Error(maybe?.error ?? `HTTP ${r.status}`);
+        }
+        const data: EventItem[] = await r.json();
+        setEvents(data);
+      } catch (e: any) {
+        setEvError(e?.message || "Failed to load events");
+      } finally {
+        setEvLoading(false);
+      }
+    })();
+  }, []);
 
   const logout = () => {
     try {
@@ -1392,16 +1260,17 @@ export default function RedRouteLandingUltra() {
         <LogOut className="size-4" /> Logout
       </button>
 
-      {/* Hero */}
+      {/* Pass city + guests filters into Hero */}
       <Hero city={cityFilter} setCity={setCityFilter} guests={guestsFilter} setGuests={setGuestsFilter} />
       <StatsStrip />
-
-      {/* Hotels */}
+      {/* Featured hotels (filtering by city + capacity) */}
       <Featured cityFilter={cityFilter} guests={guestsFilter} />
 
-      {/* Events (now dynamic from DB) */}
-      <KenBurnsShowcase />
-      <EventsGrid />
+      {/* DB-driven Ken Burns from events */}
+      <KenBurnsShowcase events={events} />
+
+      {/* Events grid */}
+      <EventStrip events={events} loading={evLoading} error={evError} />
 
       <Testimonials />
       <SiteFooter />
@@ -1416,5 +1285,65 @@ export default function RedRouteLandingUltra() {
         <ChevronUp className="size-6 text-white" />
       </button>
     </div>
+  );
+}
+
+/* --------------------------- Testimonials / Footer ------------------------- */
+function Testimonials() {
+  const quotes = [
+    { name: "Aman Mehra", role: "Product Lead", text: "RedRoute feels like a movie trailer — fast, beautiful, and I’m checked out in seconds.", initials: "AM", rating: 5 },
+    { name: "Sara Khan", role: "Event Planner", text: "Searching hotels + events in one flow is brilliant. The micro-interactions are 👌", initials: "SK", rating: 5 },
+  ];
+  return (
+    <section className="px-6 pb-16 text-white">
+      <div className="mx-auto max-w-7xl">
+        <h2 className="mb-6 text-3xl font-bold">What people say</h2>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {quotes.map((q) => (
+            <div key={q.name} className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+              <div className="flex items-start gap-4">
+                <div className="grid h-12 w-12 place-items-center rounded-full bg-white/15 text-sm font-semibold">{q.initials}</div>
+                <div className="flex-1">
+                  <div className="mb-2 flex gap-1 text-white/90">
+                    {Array.from({ length: q.rating }).map((_, i) => (
+                      <Star key={i} className="h-4 w-4 fill-white/90" />
+                    ))}
+                  </div>
+                  <p className="text-white/85">{q.text}</p>
+                  <div className="mt-3 text-sm text-white/70">
+                    {q.name} • {q.role}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SiteFooter() {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="px-6 pb-16 pt-10 text-white">
+      <div className="mx-auto max-w-7xl rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+        <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+          <div>
+            <div className="text-2xl font-black">RedRoute</div>
+            <div className="text-white/70">Hotels • Events • Experiences</div>
+          </div>
+          <nav className="flex gap-6 text-sm text-white/80">
+            <a href="#" className="hover:text-white">About</a>
+            <a href="#" className="hover:text-white">Careers</a>
+            <a href="#" className="hover:text-white">Help</a>
+            <a href="#" className="hover:text-white">Privacy</a>
+          </nav>
+        </div>
+        <div className="mt-6 border-t border-white/10 pt-4 text-sm text-white/60">
+          © {year} RedRoute. All rights reserved.
+        </div>
+      </div>
+    </footer>
   );
 }
