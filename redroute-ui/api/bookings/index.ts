@@ -15,12 +15,10 @@ function bad(res: VercelResponse, code: number, msg: string) {
   return res.status(code).json({ error: msg });
 }
 
-// Build a nice fallback display name if user has no first/last.
 function fallbackNameFromEmail(email?: string | null) {
   if (!email) return null;
   const left = email.split("@")[0] || "";
   if (!left) return null;
-  // title-case simple handles like "john.doe"
   return left
     .replace(/[._-]+/g, " ")
     .split(" ")
@@ -29,10 +27,17 @@ function fallbackNameFromEmail(email?: string | null) {
     .join(" ");
 }
 
+// UTC-midnight diff (nights)
+function nightsBetween(ci: Date, co: Date) {
+  const a = new Date(Date.UTC(ci.getUTCFullYear(), ci.getUTCMonth(), ci.getUTCDate()));
+  const b = new Date(Date.UTC(co.getUTCFullYear(), co.getUTCMonth(), co.getUTCDate()));
+  const ms = +b - +a;
+  const nights = Math.round(ms / (24 * 60 * 60 * 1000));
+  return Math.max(0, nights);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") {
-    return bad(res, 405, "Use POST");
-  }
+  if (req.method !== "POST") return bad(res, 405, "Use POST");
 
   let body: Body;
   try {
@@ -43,35 +48,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { hotelId, checkIn, checkOut, guests = 1 } = body;
 
-  // Basic validation
   const hotelIdNum = Number(hotelId);
-  if (!hotelId || Number.isNaN(hotelIdNum)) {
-    return bad(res, 400, "hotelId must be a number");
-  }
-  if (!checkIn || !checkOut) {
-    return bad(res, 400, "checkIn and checkOut are required (ISO date strings)");
-  }
+  if (!hotelId || Number.isNaN(hotelIdNum)) return bad(res, 400, "hotelId must be a number");
+  if (!checkIn || !checkOut) return bad(res, 400, "checkIn and checkOut are required");
 
   const ci = new Date(checkIn);
   const co = new Date(checkOut);
-  if (Number.isNaN(+ci) || Number.isNaN(+co) || +co <= +ci) {
-    return bad(res, 400, "Invalid date range");
-  }
+  if (Number.isNaN(+ci) || Number.isNaN(+co) || +co <= +ci) return bad(res, 400, "Invalid date range");
 
   try {
-    // Ensure hotel exists + capacity
+    // Hotel + capacity
     const hotel = await prisma.hotel.findUnique({
       where: { id: hotelIdNum },
-      select: { id: true, capacity: true, name: true },
+      select: { id: true, capacity: true, price: true, name: true },
     });
     if (!hotel) return bad(res, 404, "Hotel not found");
 
     const cap = typeof hotel.capacity === "number" ? hotel.capacity : 10;
-    if (guests < 1 || guests > cap) {
-      return bad(res, 400, `guests must be between 1 and ${cap}`);
-    }
+    if (guests < 1 || guests > cap) return bad(res, 400, `guests must be between 1 and ${cap}`);
 
-    // Check overlap for this hotel
+    // Overlap in same hotel
     const overlap = await prisma.booking.findFirst({
       where: {
         hotelId: hotelIdNum,
@@ -79,11 +75,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       select: { id: true },
     });
-    if (overlap) {
-      return bad(res, 409, "This date range is unavailable for the selected hotel.");
-    }
+    if (overlap) return bad(res, 409, "This date range is unavailable for the selected hotel.");
 
-    // Resolve user (from header x-user-id or x-user-email, which your client sets)
+    // Identify user from headers set by client
     const headerUserId =
       typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"].trim() : null;
     const headerEmail =
@@ -106,19 +100,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         userLast = u.lastName ?? null;
       }
     }
+    if (!userId) return bad(res, 401, "Not authenticated");
 
-    // Fallback (shouldn't happen if auth is wired) – require some user
-    if (!userId) {
-      return bad(res, 401, "Not authenticated");
-    }
-
-    // Finalize contact fields: prefer body values, else derive from user
+    // Derive contact fields if client didn’t send them
     const defaultName =
-      (userFirst || userLast) ? [userFirst, userLast].filter(Boolean).join(" ").trim() : fallbackNameFromEmail(userEmail);
+      (userFirst || userLast)
+        ? [userFirst, userLast].filter(Boolean).join(" ").trim()
+        : fallbackNameFromEmail(userEmail);
     const finalContactName = body.contactName ?? defaultName ?? null;
     const finalContactEmail = body.contactEmail ?? userEmail ?? null;
 
-    // Create booking
+    // ---- NEW: compute totalCost on the server ----
+    const nights = nightsBetween(ci, co);            // >= 1 because we validated co > ci
+    const totalCost = hotel.price * nights;          // Hotel.price is Int per night
+
+    // Create booking (now storing totalCost)
     const booking = await prisma.booking.create({
       data: {
         userId,
@@ -128,6 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         guests,
         contactName: finalContactName,
         contactEmail: finalContactEmail,
+        totalCost,                                // 👈 new column
       },
       select: {
         id: true,
@@ -138,6 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         guests: true,
         contactName: true,
         contactEmail: true,
+        totalCost: true,                          // 👈 return it
         createdAt: true,
       },
     });
