@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Calendar, MapPin, Minus, Plus, CheckCircle2 } from "lucide-react";
 import { Button } from "./components/ui/button";
