@@ -1,7 +1,6 @@
-// src/EventCheckout.tsx
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, Minus, Plus, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, Minus, Plus, CheckCircle2, Home } from "lucide-react";
 import confetti from "canvas-confetti";
 
 /* ---------- auth/meta helper ---------- */
@@ -66,6 +65,51 @@ function fmtEventWhen(iso?: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+/* ---------- Confetti: fire from all sides, no overlay canvas ---------- */
+function useCelebration() {
+  const rafRef = useRef<number | null>(null);
+
+  function stop() {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }
+
+  function start(durationMs = 2600) {
+    stop(); // ensure clean start
+
+    const animationEnd = Date.now() + durationMs;
+
+    const base = { startVelocity: 45, ticks: 200, zIndex: 9999 };
+    const rand = (min: number, max: number) => Math.random() * (max - min) + min;
+
+    const frame = () => {
+      const timeLeft = animationEnd - Date.now();
+      if (timeLeft <= 0) return stop();
+
+      const particleCount = Math.max(12, Math.floor(80 * (timeLeft / durationMs)));
+
+      // 4 corners
+      confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.05 } }); // TL
+      confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.05 } }); // TR
+      confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.95 } }); // BL
+      confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.95 } }); // BR
+
+      // top & bottom sweeps
+      confetti({ ...base, particleCount: 24, spread: 120, origin: { x: rand(0.2, 0.8), y: 0 } });
+      confetti({ ...base, particleCount: 24, spread: 120, origin: { x: rand(0.2, 0.8), y: 1 } });
+
+      rafRef.current = requestAnimationFrame(frame);
+    };
+
+    rafRef.current = requestAnimationFrame(frame);
+  }
+
+  useEffect(() => stop, []); // cleanup on unmount
+  return { start, stop };
 }
 
 export default function EventCheckout() {
@@ -168,74 +212,8 @@ export default function EventCheckout() {
 
   const valid = eventId && qty > 0 && price != null;
 
-  // ---- CONFETTI (full-screen canvas) ----
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const confettiIntervalRef = useRef<number | null>(null);
-
-  // Ensure the canvas matches the viewport (extra safety even with resize: true)
-  useEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    const setSize = () => {
-      el.width = window.innerWidth;
-      el.height = window.innerHeight;
-    };
-    setSize();
-    window.addEventListener("resize", setSize);
-    return () => window.removeEventListener("resize", setSize);
-  }, []);
-
-  function stopConfetti() {
-    if (confettiIntervalRef.current != null) {
-      window.clearInterval(confettiIntervalRef.current);
-      confettiIntervalRef.current = null;
-    }
-  }
-
-  function fireCelebration() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // Clear any previously running bursts
-    stopConfetti();
-
-    const shoot = confetti.create(canvas, { resize: true, useWorker: true });
-
-    // Immediate center burst so it’s obvious
-    shoot({ particleCount: 120, spread: 70, origin: { x: 0.5, y: 0.5 }, startVelocity: 55 });
-
-    const duration = 2600;
-    const end = Date.now() + duration;
-    const defaults = { startVelocity: 45, spread: 75, ticks: 250, scalar: 1 };
-
-    const rand = (min: number, max: number) => Math.random() * (max - min) + min;
-
-    // Repeating four-corner + edge sweeps
-    confettiIntervalRef.current = window.setInterval(() => {
-      const timeLeft = end - Date.now();
-      if (timeLeft <= 0) {
-        stopConfetti();
-        return;
-      }
-
-      const particleCount = 40;
-
-      // Corners
-      shoot({ ...defaults, particleCount, origin: { x: rand(0.00, 0.15), y: rand(0.00, 0.10) } }); // TL
-      shoot({ ...defaults, particleCount, origin: { x: rand(0.85, 1.00), y: rand(0.00, 0.10) } }); // TR
-      shoot({ ...defaults, particleCount, origin: { x: rand(0.00, 0.15), y: rand(0.90, 1.00) } }); // BL
-      shoot({ ...defaults, particleCount, origin: { x: rand(0.85, 1.00), y: rand(0.90, 1.00) } }); // BR
-
-      // Sweeps across top & bottom
-      shoot({ ...defaults, particleCount: 24, spread: 120, origin: { x: rand(0.25, 0.75), y: 0 } });
-      shoot({ ...defaults, particleCount: 24, spread: 120, origin: { x: rand(0.25, 0.75), y: 1 } });
-    }, 180) as unknown as number;
-  }
-
-  // Cleanup any confetti timers when leaving the page
-  useEffect(() => {
-    return () => stopConfetti();
-  }, []);
+  // confetti hook
+  const celebration = useCelebration();
 
   async function payAndBook() {
     try {
@@ -268,8 +246,8 @@ export default function EventCheckout() {
       setConfirmed(true);
       setMsg({ ok: true, text: "Payment successful! Your tickets are booked." });
 
-      // Fire confetti AFTER state updates so the canvas is definitely mounted
-      requestAnimationFrame(() => fireCelebration());
+      // fire confetti exactly when success happens
+      celebration.start(3000);
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
     } finally {
@@ -282,22 +260,14 @@ export default function EventCheckout() {
 
   return (
     <div className="min-h-screen bg-black text-white relative">
-      {/* Full-screen confetti canvas overlay */}
-      <canvas
-        ref={canvasRef}
-        className="pointer-events-none fixed inset-0"
-        style={{ zIndex: 2147483647, width: "100vw", height: "100vh" }}
-        aria-hidden="true"
-      />
-
-      {/* Fixed Back-to-Home button (top-left) */}
+      {/* Fixed Back-to-Home (visible above everything) */}
       <button
         onClick={() => navigate("/home")}
-        className="fixed left-5 top-5 z-[2147483647] inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
+        className="fixed left-5 top-5 z-[9999] inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
         aria-label="Back to home"
         title="Back to home"
       >
-        <ChevronLeft className="h-4 w-4" />
+        <Home className="h-4 w-4" />
         Home
       </button>
 
@@ -459,3 +429,5 @@ export default function EventCheckout() {
     </div>
   );
 }
+
+
