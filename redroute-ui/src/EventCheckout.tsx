@@ -1,8 +1,10 @@
+// src/EventCheckout.tsx
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, Minus, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, Minus, Plus, CheckCircle2 } from "lucide-react";
+import confetti from "canvas-confetti";
 
-/* ---------- auth/meta helper (same pattern as hotel checkout) ---------- */
+/* ---------- auth/meta helper ---------- */
 async function getMe() {
   const r = await fetch("/api/auth/me", { credentials: "include" });
   if (!r.ok) throw new Error("Not authenticated");
@@ -42,11 +44,21 @@ type EventType = {
   imageAlt?: string | null;
 };
 
+type CreatedEventBooking = {
+  id: number;
+  userId: string;
+  eventId: number;
+  qty: number;
+  totalCost: number;
+  contactName?: string | null;
+  contactEmail?: string | null;
+  createdAt: string;
+};
+
 /* ---------- date/time helpers ---------- */
 function fmtEventWhen(iso?: string) {
   if (!iso) return "";
   const d = new Date(iso);
-  // e.g., "Mon, Sep 15 • 8:00 PM"
   return d.toLocaleString(undefined, {
     weekday: "short",
     month: "short",
@@ -76,7 +88,7 @@ export default function EventCheckout() {
   }
   if (!initial.qty && params.get("qty")) initial.qty = Number(params.get("qty"));
 
-  const [eventId]   = useState<number>(Number(initial.eventId || 0));
+  const [eventId] = useState<number>(Number(initial.eventId || 0));
   const [name, setName] = useState<string>(initial.name || "");
   const [where, setWhere] = useState<string>(initial.location || "");
   const [when, setWhen] = useState<string>(initial.startsAt || "");
@@ -91,6 +103,10 @@ export default function EventCheckout() {
   const [me, setMe] = useState<{ id?: string | null; email?: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // NEW: stay-on-page confirmation + saved booking
+  const [confirmed, setConfirmed] = useState(false);
+  const [booking, setBooking] = useState<CreatedEventBooking | null>(null);
 
   // Persist basic payload so refresh/back keeps data
   useEffect(() => {
@@ -125,7 +141,7 @@ export default function EventCheckout() {
         setPrice(ev.price);
         if (ev.imageUrl) setImage(ev.imageUrl);
       } catch {
-        // ignore (UI will show fallbacks)
+        // ignore (UI shows fallbacks)
       }
     })();
   }, [eventId, name, price, when]);
@@ -140,7 +156,7 @@ export default function EventCheckout() {
         setContactName(full || (m.email ? m.email.split("@")[0] : ""));
         setContactEmail(m.email || "");
       } catch {
-        // user not logged in; your route guard should handle it
+        // route guard should handle unauthenticated
       }
     })();
   }, []);
@@ -152,15 +168,47 @@ export default function EventCheckout() {
 
   const valid = eventId && qty > 0 && price != null;
 
+  // ---- CONFETTI (full-screen canvas) ----
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  function fireCelebration() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const shoot = confetti.create(canvas, { resize: true, useWorker: true });
+
+    const duration = 2500;
+    const end = Date.now() + duration;
+    const defaults = { startVelocity: 45, spread: 75, ticks: 250, scalar: 1 };
+
+    const rand = (min: number, max: number) => Math.random() * (max - min) + min;
+
+    const interval = setInterval(() => {
+      const timeLeft = end - Date.now();
+      if (timeLeft <= 0) {
+        clearInterval(interval);
+        return;
+      }
+
+      const particleCount = 40;
+
+      // Four corners
+      shoot({ ...defaults, particleCount, origin: { x: rand(0.00, 0.15), y: rand(0.00, 0.10) } }); // TL
+      shoot({ ...defaults, particleCount, origin: { x: rand(0.85, 1.00), y: rand(0.00, 0.10) } }); // TR
+      shoot({ ...defaults, particleCount, origin: { x: rand(0.00, 0.15), y: rand(0.90, 1.00) } }); // BL
+      shoot({ ...defaults, particleCount, origin: { x: rand(0.85, 1.00), y: rand(0.90, 1.00) } }); // BR
+
+      // A couple sweeps from top & bottom for fullness
+      shoot({ ...defaults, particleCount: 20, spread: 120, origin: { x: rand(0.3, 0.7), y: 0 } });
+      shoot({ ...defaults, particleCount: 20, spread: 120, origin: { x: rand(0.3, 0.7), y: 1 } });
+    }, 180);
+  }
+
   async function payAndBook() {
     try {
       setMsg(null);
       if (!valid) throw new Error("Missing or invalid booking details.");
       if (!me) throw new Error("Not authenticated.");
-
       setBusy(true);
 
-      // (Stripe would go here; we directly create the booking)
       const r = await fetch("/api/event-bookings", {
         method: "POST",
         headers: {
@@ -176,14 +224,17 @@ export default function EventCheckout() {
         }),
       });
 
-      const isJSON = (r.headers.get("content-type") || "").includes("application/json");
-      const payload = isJSON ? await r.json().catch(() => null) : null;
+      const raw = await r.text();
+      const payload = raw ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : null;
 
       if (!r.ok) throw new Error(payload?.error || `Payment/booking failed (HTTP ${r.status})`);
 
+      setBooking(payload?.booking ?? null);
+      setConfirmed(true);
       setMsg({ ok: true, text: "Payment successful! Your tickets are booked." });
-      // Optionally navigate to a confirmation page:
-      // navigate(`/events/${eventId}?success=1`);
+
+      // Confetti!
+      requestAnimationFrame(() => fireCelebration());
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
     } finally {
@@ -192,14 +243,23 @@ export default function EventCheckout() {
   }
 
   const minQty = 1;
-  const maxQty = 10; // adjust if you expose capacity on the page
+  const maxQty = 10; // adjust if you enforce capacity
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white relative">
+      {/* Full-screen confetti canvas overlay */}
+      <canvas
+        ref={canvasRef}
+        className="pointer-events-none fixed inset-0 z-[9998]"
+        style={{ width: "100vw", height: "100vh" }}
+        aria-hidden="true"
+      />
+
       <div className="mx-auto max-w-4xl p-6">
         <button
           onClick={() => navigate(-1)}
           className="mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
+          disabled={busy}
         >
           <ChevronLeft className="h-4 w-4" /> Back
         </button>
@@ -242,68 +302,110 @@ export default function EventCheckout() {
                 {msg.text}
               </div>
             )}
+
+            {/* Confirmation panel (stay on page) */}
+            {confirmed && (
+              <div className="mt-5 rounded-2xl border border-green-600/30 bg-green-600/15 p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" />
+                  <div>
+                    <div className="text-lg font-semibold text-green-400">Tickets confirmed!</div>
+                    <div className="text-white/85">
+                      You’re all set for <strong>{name}</strong> — {fmtEventWhen(when)} at <strong>{where}</strong>.
+                      {booking?.contactEmail ? <> A confirmation was sent to <strong>{booking.contactEmail}</strong>.</> : null}
+                    </div>
+                    <div className="mt-3 grid gap-2 rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/70">Reference</span>
+                        <span className="font-mono">{booking?.id ?? "—"}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/70">Tickets</span>
+                        <span>{booking?.qty ?? qty}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/70">Total paid</span>
+                        <span>${(booking?.totalCost ?? subtotal).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Pay box (right) */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5 h-fit">
-            <div className="text-sm text-white/80 mb-2">Contact</div>
-            <input
-              className="mb-2 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
-              placeholder="Contact name"
-              value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
-            />
-            <input
-              className="mb-4 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
-              placeholder="Contact email"
-              value={contactEmail}
-              onChange={(e) => setContactEmail(e.target.value)}
-            />
+            {!confirmed ? (
+              <>
+                <div className="text-sm text-white/80 mb-2">Contact</div>
+                <input
+                  className="mb-2 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                  placeholder="Contact name"
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                />
+                <input
+                  className="mb-4 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                  placeholder="Contact email"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                />
 
-            <div className="text-sm text-white/80 mb-2">Tickets</div>
-            <div className="mb-4 inline-flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setQty((q) => Math.max(minQty, q - 1))}
-                disabled={qty <= minQty}
-                className="grid size-9 place-items-center rounded-xl border border-white/15 bg-white/10 hover:bg-white/20 disabled:opacity-50"
-                aria-label="Decrease tickets"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <div className="w-10 text-center text-base tabular-nums">{qty}</div>
-              <button
-                type="button"
-                onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
-                disabled={qty >= maxQty}
-                className="grid size-9 place-items-center rounded-xl border border-white/15 bg-white/10 hover:bg-white/20 disabled:opacity-50"
-                aria-label="Increase tickets"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
+                <div className="text-sm text-white/80 mb-2">Tickets</div>
+                <div className="mb-4 inline-flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQty((q) => Math.max(minQty, q - 1))}
+                    disabled={qty <= minQty}
+                    className="grid size-9 place-items-center rounded-xl border border-white/15 bg-white/10 hover:bg-white/20 disabled:opacity-50"
+                    aria-label="Decrease tickets"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <div className="w-10 text-center text-base tabular-nums">{qty}</div>
+                  <button
+                    type="button"
+                    onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
+                    disabled={qty >= maxQty}
+                    className="grid size-9 place-items-center rounded-xl border border-white/15 bg-white/10 hover:bg-white/20 disabled:opacity-50"
+                    aria-label="Increase tickets"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
 
-            <div className="text-sm text-white/80 mb-2">Amount due</div>
-            <div className="text-3xl font-bold mb-5">${subtotal.toLocaleString()}</div>
+                <div className="text-sm text-white/80 mb-2">Amount due</div>
+                <div className="text-3xl font-bold mb-5">${subtotal.toLocaleString()}</div>
 
-            <button
-              disabled={!valid || busy}
-              onClick={payAndBook}
-              className="h-11 w-full rounded-xl font-semibold hover:brightness-110 disabled:opacity-60"
-              style={{ background: "#E50914" }}
-            >
-              {busy ? "Processing…" : "Pay & Confirm"}
-            </button>
+                <button
+                  disabled={!valid || busy}
+                  onClick={payAndBook}
+                  className="h-11 w-full rounded-xl font-semibold hover:brightness-110 disabled:opacity-60"
+                  style={{ background: "#E50914" }}
+                >
+                  {busy ? "Processing…" : "Pay & Confirm"}
+                </button>
 
-            {!valid && (
-              <div className="mt-3 text-xs text-red-400">
-                Missing/invalid details. Go back and pick tickets again.
+                {!valid && (
+                  <div className="mt-3 text-xs text-red-400">
+                    Missing/invalid details. Go back and pick tickets again.
+                  </div>
+                )}
+
+                <div className="mt-5 text-xs text-white/60">
+                  By confirming, you agree to our Terms and Cancellation Policy.
+                </div>
+              </>
+            ) : (
+              <div className="text-center">
+                <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                <div className="text-xl font-bold">Payment complete</div>
+                <div className="mt-1 text-white/80">
+                  Your ticket details are shown on the left and saved to your account.
+                </div>
               </div>
             )}
-
-            <div className="mt-5 text-xs text-white/60">
-              By confirming, you agree to our Terms and Cancellation Policy.
-            </div>
           </div>
         </div>
       </div>
