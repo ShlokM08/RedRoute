@@ -192,7 +192,7 @@ Perfect for a slow afternoon steeped in nostalgia and rich acoustics.`,
       startsAt: daysFromNowUtcAt(3, 14, 0),
       price: 35,
       capacity: 300,
-      imageUrl: "/images/event_theatre.png",
+      imageUrl: "/images/event_theatre.jpg",
       imageAlt: "Historic theatre with purple lights and audience",
     },
     {
