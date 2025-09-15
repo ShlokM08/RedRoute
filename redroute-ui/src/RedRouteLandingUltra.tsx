@@ -31,12 +31,15 @@ import {
   Plus,
 } from "lucide-react";
 
-/* --------------------- cookie helpers (NEW) --------------------- */
+/* --------------------- cookie helpers --------------------- */
 function setCookie(name: string, value: string, days = 7) {
   const maxAge = `Max-Age=${days * 24 * 60 * 60}`;
   const sameSite = "SameSite=Lax";
-  const secure = typeof window !== "undefined" && window.location.protocol === "https:" ? " Secure" : "";
-  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; Path=/; ${maxAge}; ${sameSite};${secure}`;
+  const secure =
+    typeof window !== "undefined" && window.location.protocol === "https:" ? " Secure" : "";
+  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(
+    value
+  )}; Path=/; ${maxAge}; ${sameSite};${secure}`;
 }
 function deleteCookie(name: string) {
   document.cookie = `${encodeURIComponent(name)}=; Path=/; Max-Age=0; SameSite=Lax`;
@@ -45,8 +48,8 @@ function deleteCookie(name: string) {
 /* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
 function KenBurnsShowcase() {
   const slides = [
-    { img: "/images/event_arena.jpeg",   title: "Arena Night",      sub: "Citywide tour" },
-    { img: "/images/event_rooftop.jpeg", title: "Rooftop Cinema",   sub: "Fridays 8pm" },
+    { img: "/images/event_arena.jpeg", title: "Arena Night", sub: "Citywide tour" },
+    { img: "/images/event_rooftop.jpeg", title: "Rooftop Cinema", sub: "Fridays 8pm" },
     { img: "/images/event_theatre.avif", title: "Old Town Theatre", sub: "Matinee daily" },
   ];
   const seq = [...slides, ...slides];
@@ -59,7 +62,9 @@ function KenBurnsShowcase() {
             <div key={i} className="relative h-56 min-w-[70%] md:h-72 md:min-w-[40%] overflow-hidden">
               <motion.img
                 src={s.img}
-                onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg"; }}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg";
+                }}
                 alt={s.title}
                 className="absolute inset-0 h-full w-full object-cover"
                 initial={{ scale: 1.05, x: 0 }}
@@ -156,7 +161,10 @@ function TiltCard({ children }: { children: React.ReactNode }) {
     ry.set(clamp((x - 0.5) * 16, -8, 8));
     rx.set(clamp(-(y - 0.5) * 16, -8, 8));
   }
-  function onLeave() { rx.set(0); ry.set(0); }
+  function onLeave() {
+    rx.set(0);
+    ry.set(0);
+  }
 
   return (
     <motion.div
@@ -256,21 +264,21 @@ type Destination = {
 };
 
 const DESTINATIONS: Destination[] = [
-  { id: "doha",     label: "Doha, Qatar",            meta: "Popular • Middle East", emoji: "🏜️", group: "Popular", tokens: "doha qatar middle east" },
-  { id: "dubai",    label: "Dubai, UAE",             meta: "Popular • Middle East", emoji: "🏙️", group: "Popular", tokens: "dubai uae united arab emirates middle east" },
-  { id: "paris",    label: "Paris, France",          meta: "Popular • Europe",      emoji: "🗼", group: "Popular", tokens: "paris france europe" },
-  { id: "bali",     label: "Bali, Indonesia",        meta: "Popular • Asia",        emoji: "🏖️", group: "Popular", tokens: "bali indonesia asia denpasar" },
-  { id: "london",   label: "London, United Kingdom", meta: "Popular • Europe",      emoji: "🎡", group: "Popular", tokens: "london uk united kingdom england europe" },
-  { id: "rome",     label: "Rome, Italy",            meta: "City • Europe",  emoji: "🏛️", group: "Cities",  tokens: "rome italy europe" },
-  { id: "barcelona",label: "Barcelona, Spain",       meta: "City • Europe",  emoji: "🏖️", group: "Cities",  tokens: "barcelona spain europe" },
-  { id: "istanbul", label: "Istanbul, Türkiye",      meta: "City • Europe/Asia", emoji: "🕌", group: "Cities", tokens: "istanbul turkey türkiye eurasia" },
-  { id: "newyork",  label: "New York, USA",          meta: "City • North America", emoji: "🗽", group: "Cities", tokens: "new york nyc usa united states america" },
-  { id: "tokyo",    label: "Tokyo, Japan",           meta: "City • Asia",    emoji: "🏮", group: "Cities",  tokens: "tokyo japan asia" },
-  { id: "amalfi",   label: "Amalfi Coast, Italy",    meta: "Region • Europe", emoji: "🌊", group: "Regions", tokens: "amalfi coast italy europe" },
-  { id: "alps",     label: "Swiss Alps, Switzerland",meta: "Region • Europe", emoji: "🏔️", group: "Regions", tokens: "swiss alps switzerland europe mountains" },
-  { id: "riviera",  label: "French Riviera, France", meta: "Region • Europe", emoji: "🌞", group: "Regions", tokens: "french riviera cote d azur france europe nice cannes monaco" },
-  { id: "bavaria",  label: "Bavaria, Germany",       meta: "Region • Europe", emoji: "🏰", group: "Regions", tokens: "bavaria germany europe munich" },
-  { id: "maldives", label: "Maldives",               meta: "Region • Indian Ocean", emoji: "🏝️", group: "Regions", tokens: "maldives indian ocean resort islands" },
+  { id: "doha", label: "Doha, Qatar", meta: "Popular • Middle East", emoji: "🏜️", group: "Popular", tokens: "doha qatar middle east" },
+  { id: "dubai", label: "Dubai, UAE", meta: "Popular • Middle East", emoji: "🏙️", group: "Popular", tokens: "dubai uae united arab emirates middle east" },
+  { id: "paris", label: "Paris, France", meta: "Popular • Europe", emoji: "🗼", group: "Popular", tokens: "paris france europe" },
+  { id: "bali", label: "Bali, Indonesia", meta: "Popular • Asia", emoji: "🏖️", group: "Popular", tokens: "bali indonesia asia denpasar" },
+  { id: "london", label: "London, United Kingdom", meta: "Popular • Europe", emoji: "🎡", group: "Popular", tokens: "london uk united kingdom england europe" },
+  { id: "rome", label: "Rome, Italy", meta: "City • Europe", emoji: "🏛️", group: "Cities", tokens: "rome italy europe" },
+  { id: "barcelona", label: "Barcelona, Spain", meta: "City • Europe", emoji: "🏖️", group: "Cities", tokens: "barcelona spain europe" },
+  { id: "istanbul", label: "Istanbul, Türkiye", meta: "City • Europe/Asia", emoji: "🕌", group: "Cities", tokens: "istanbul turkey türkiye eurasia" },
+  { id: "newyork", label: "New York, USA", meta: "City • North America", emoji: "🗽", group: "Cities", tokens: "new york nyc usa united states america" },
+  { id: "tokyo", label: "Tokyo, Japan", meta: "City • Asia", emoji: "🏮", group: "Cities", tokens: "tokyo japan asia" },
+  { id: "amalfi", label: "Amalfi Coast, Italy", meta: "Region • Europe", emoji: "🌊", group: "Regions", tokens: "amalfi coast italy europe" },
+  { id: "alps", label: "Swiss Alps, Switzerland", meta: "Region • Europe", emoji: "🏔️", group: "Regions", tokens: "swiss alps switzerland europe mountains" },
+  { id: "riviera", label: "French Riviera, France", meta: "Region • Europe", emoji: "🌞", group: "Regions", tokens: "french riviera cote d azur france europe nice cannes monaco" },
+  { id: "bavaria", label: "Bavaria, Germany", meta: "Region • Europe", emoji: "🏰", group: "Regions", tokens: "bavaria germany europe munich" },
+  { id: "maldives", label: "Maldives", meta: "Region • Indian Ocean", emoji: "🏝️", group: "Regions", tokens: "maldives indian ocean resort islands" },
 ];
 
 function normalize(s: string) {
@@ -304,7 +312,10 @@ function DestinationPicker({
 
   useEffect(() => {
     if (!open) return;
-    if (filtered.length === 0) { setActive(null); return; }
+    if (filtered.length === 0) {
+      setActive(null);
+      return;
+    }
     const current = filtered.find((d) => d.id === active);
     if (!current) setActive(filtered[0].id);
   }, [open, filtered, active]);
@@ -322,14 +333,20 @@ function DestinationPicker({
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      if (!open) { setOpen(true); return; }
+      if (!open) {
+        setOpen(true);
+        return;
+      }
       const idx = filtered.findIndex((d) => d.id === active);
       const next = filtered[Math.min(idx + 1, filtered.length - 1)];
       if (next) setActive(next.id);
       scrollIntoView(next?.id);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      if (!open) { setOpen(true); return; }
+      if (!open) {
+        setOpen(true);
+        return;
+      }
       const idx = filtered.findIndex((d) => d.id === active);
       const prev = filtered[Math.max(idx - 1, 0)];
       if (prev) setActive(prev.id);
@@ -344,7 +361,10 @@ function DestinationPicker({
         setOpen(false);
       }
     } else if (e.key === "Escape") {
-      if (open) { e.preventDefault(); setOpen(false); }
+      if (open) {
+        e.preventDefault();
+        setOpen(false);
+      }
     }
   }
 
@@ -369,7 +389,10 @@ function DestinationPicker({
         aria-activedescendant={active ? `dest-${active}` : undefined}
         placeholder="Where to?"
         value={value}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
         autoComplete="off"
@@ -428,7 +451,9 @@ function DestinationPicker({
               );
             })}
             {filtered.length === 0 && (
-              <div className="px-4 py-6 text-sm text-white/70">No matches. Try a city, country, or region.</div>
+              <div className="px-4 py-6 text-sm text-white/70">
+                No matches. Try a city, country, or region.
+              </div>
             )}
           </motion.div>
         )}
@@ -472,7 +497,6 @@ function GuestsPopover({
   }, [open]);
 
   function bump(key: keyof Guests, delta: number) {
-    // Start from current value (controlled by parent)
     let next: Guests = {
       adults: value.adults,
       kids: value.kids,
@@ -484,16 +508,27 @@ function GuestsPopover({
       next.kids = Math.max(0, value.kids + delta);
     }
 
-    // Respect total cap
     if (next.adults + next.kids > MAX_TOTAL) return;
 
-    onChange(next); // pass a value, not a function
+    onChange(next);
   }
 
-  function Row({ title, note, value, onMinus, onPlus, disabledMinus, disabledPlus }: {
-    title: string; note?: string; value: number;
-    onMinus: () => void; onPlus: () => void;
-    disabledMinus?: boolean; disabledPlus?: boolean;
+  function Row({
+    title,
+    note,
+    value,
+    onMinus,
+    onPlus,
+    disabledMinus,
+    disabledPlus,
+  }: {
+    title: string;
+    note?: string;
+    value: number;
+    onMinus: () => void;
+    onPlus: () => void;
+    disabledMinus?: boolean;
+    disabledPlus?: boolean;
   }) {
     return (
       <div className="flex items-center justify-between gap-4 py-2">
@@ -574,11 +609,7 @@ function GuestsPopover({
               >
                 Reset
               </button>
-              <Button
-                className="h-9 rounded-xl px-4 text-sm"
-                onClick={() => setOpen(false)}
-                style={{ background: RR.red }}
-              >
+              <Button className="h-9 rounded-xl px-4 text-sm" onClick={() => setOpen(false)} style={{ background: RR.red }}>
                 Done
               </Button>
             </div>
@@ -606,11 +637,17 @@ function CalendarPopover() {
 
   const onPrev = () => {
     const m = viewM - 1;
-    if (m < 0) { setViewM(11); setViewY((y) => y - 1); } else setViewM(m);
+    if (m < 0) {
+      setViewM(11);
+      setViewY((y) => y - 1);
+    } else setViewM(m);
   };
   const onNext = () => {
     const m = viewM + 1;
-    if (m > 11) { setViewM(0); setViewY((y) => y + 1); } else setViewM(m);
+    if (m > 11) {
+      setViewM(0);
+      setViewY((y) => y + 1);
+    } else setViewM(m);
   };
 
   const onPick = (d: Date) => {
@@ -624,22 +661,13 @@ function CalendarPopover() {
   };
 
   const label =
-    start && end
-      ? `${fmtShort(start)} — ${fmtShort(end)}`
-      : start
-      ? `${fmtShort(start)} — …`
-      : "";
+    start && end ? `${fmtShort(start)} — ${fmtShort(end)}` : start ? `${fmtShort(start)} — …` : "";
 
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (!open) return;
       const t = e.target as Node;
-      if (
-        popRef.current &&
-        !popRef.current.contains(t) &&
-        anchorRef.current &&
-        !anchorRef.current.contains(t)
-      ) {
+      if (popRef.current && !popRef.current.contains(t) && anchorRef.current && !anchorRef.current.contains(t)) {
         setOpen(false);
       }
     }
@@ -647,7 +675,6 @@ function CalendarPopover() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  //const dow = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const isSelected = useCallback(
     (d: Date) => (start && isSameDate(d, start)) || (end && isSameDate(d, end)),
     [start, end]
@@ -698,7 +725,11 @@ function CalendarPopover() {
 
             <div className="px-3 py-2">
               <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
-                {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d) => (<div key={d} className="py-1">{d}</div>))}
+                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+                  <div key={d} className="py-1">
+                    {d}
+                  </div>
+                ))}
               </div>
 
               <div className="grid grid-cols-7 gap-1">
@@ -728,7 +759,13 @@ function CalendarPopover() {
 
               <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-white/60">
                 <span>Pick start, then end</span>
-                <button className="underline hover:text-white" onClick={() => { setStart(null); setEnd(null); }}>
+                <button
+                  className="underline hover:text-white"
+                  onClick={() => {
+                    setStart(null);
+                    setEnd(null);
+                  }}
+                >
                   Clear
                 </button>
               </div>
@@ -742,8 +779,20 @@ function CalendarPopover() {
 
 function Testimonials() {
   const quotes = [
-    { name: "Aman Mehra", role: "Product Lead", text: "RedRoute feels like a movie trailer — fast, beautiful, and I’m checked out in seconds.", initials: "AM", rating: 5 },
-    { name: "Sara Khan", role: "Event Planner", text: "Searching hotels + events in one flow is brilliant. The micro-interactions are 👌", initials: "SK", rating: 5 },
+    {
+      name: "Aman Mehra",
+      role: "Product Lead",
+      text: "RedRoute feels like a movie trailer — fast, beautiful, and I’m checked out in seconds.",
+      initials: "AM",
+      rating: 5,
+    },
+    {
+      name: "Sara Khan",
+      role: "Event Planner",
+      text: "Searching hotels + events in one flow is brilliant. The micro-interactions are 👌",
+      initials: "SK",
+      rating: 5,
+    },
   ];
   return (
     <section className="px-6 pb-16 text-white">
@@ -753,7 +802,9 @@ function Testimonials() {
           {quotes.map((q) => (
             <div key={q.name} className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
               <div className="flex items-start gap-4">
-                <div className="grid h-12 w-12 place-items-center rounded-full bg-white/15 text-sm font-semibold">{q.initials}</div>
+                <div className="grid h-12 w-12 place-items-center rounded-full bg-white/15 text-sm font-semibold">
+                  {q.initials}
+                </div>
                 <div className="flex-1">
                   <div className="mb-2 flex gap-1 text-white/90">
                     {Array.from({ length: q.rating }).map((_, i) => (
@@ -785,10 +836,18 @@ function SiteFooter() {
             <div className="text-white/70">Hotels • Events • Experiences</div>
           </div>
           <nav className="flex gap-6 text-sm text-white/80">
-            <a href="#" className="hover:text-white">About</a>
-            <a href="#" className="hover:text-white">Careers</a>
-            <a href="#" className="hover:text-white">Help</a>
-            <a href="#" className="hover:text-white">Privacy</a>
+            <a href="#" className="hover:text-white">
+              About
+            </a>
+            <a href="#" className="hover:text-white">
+              Careers
+            </a>
+            <a href="#" className="hover:text-white">
+              Help
+            </a>
+            <a href="#" className="hover:text-white">
+              Privacy
+            </a>
           </nav>
         </div>
         <div className="mt-6 border-t border-white/10 pt-4 text-sm text-white/60">
@@ -811,16 +870,20 @@ function Hero({
   guests: Guests;
   setGuests: (g: Guests | ((prev: Guests) => Guests)) => void;
 }) {
-  // cursor glow & parallax (kept)
   const mx = useMotionValue(0.5);
   const my = useMotionValue(0.5);
-  const pTitle = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`);
-  const pPanel = useTransform([mx, my], ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`);
+  const pTitle = useTransform(
+    [mx, my],
+    ([x, y]: number[]) => `translate3d(${(x - 0.5) * 18}px, ${(y - 0.5) * 12}px, 0)`
+  );
+  const pPanel = useTransform(
+    [mx, my],
+    ([x, y]: number[]) => `translate3d(${(x - 0.5) * -14}px, ${(y - 0.5) * -10}px, 0)`
+  );
 
   const glowX = useTransform(mx, (v) => `${v * 100}%`);
   const glowY = useTransform(my, (v) => `${v * 100}%`);
 
-  // Personalized headline
   const [firstName, setFirstName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -832,7 +895,6 @@ function Hero({
 
     (async () => {
       try {
-        // IMPORTANT: include credentials so cookies round-trip
         const r = await fetch("/api/auth/me", { credentials: "include" });
         if (r.ok) {
           const me = await r.json().catch(() => null);
@@ -845,7 +907,6 @@ function Hero({
             localStorage.setItem("rr_name", fn);
             setFirstName(fn.split(" ")[0]);
           }
-          // NEW: set cookies that /api/bookings reads (uid/email)
           if (id && typeof id === "string") setCookie("uid", id, 7);
           if (email && typeof email === "string") {
             localStorage.setItem("rr_email", email);
@@ -922,10 +983,7 @@ function Hero({
                     <GuestsPopover value={guests} onChange={setGuests as any} />
                   </Field>
                   <Field label={<span className="sr-only">Search</span>}>
-                    <Button
-                      className="h-10 w-full text-sm rounded-xl relative overflow-hidden"
-                      onClick={scrollToFeatured}
-                    >
+                    <Button className="h-10 w-full text-sm rounded-xl relative overflow-hidden" onClick={scrollToFeatured}>
                       <span className="relative z-10">Search</span>
                       <span className="pointer-events-none absolute inset-0 translate-x-[-120%] bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] animate-[sheen_1.8s_linear_infinite]" />
                     </Button>
@@ -972,7 +1030,10 @@ function MagneticButton() {
     x.set(clamp(dx * 0.2, -12, 12));
     y.set(clamp(dy * 0.2, -10, 10));
   }
-  function onLeave() { x.set(0); y.set(0); }
+  function onLeave() {
+    x.set(0);
+    y.set(0);
+  }
 
   return (
     <motion.button
@@ -1022,9 +1083,18 @@ function StatsStrip() {
             <div className="grid place-items-center rounded-xl bg-white/10 p-2">{it.icon}</div>
             <div>
               <div className="text-xl font-bold">
-                {it.label.includes("rating") ? (<><CountUp value={it.value} />★</>) :
-                 it.label.includes("time") ? (<><CountUp value={it.value} />s</>) :
-                 (<CountUp value={it.value} />)}
+                {it.label.includes("rating") ? (
+                  <>
+                    <CountUp value={it.value} />★
+                  </>
+                ) : it.label.includes("time") ? (
+                  <>
+                    <CountUp value={it.value} />
+                    s
+                  </>
+                ) : (
+                  <CountUp value={it.value} />
+                )}
               </div>
               <div className="text-xs text-white/70">{it.label}</div>
             </div>
@@ -1035,7 +1105,7 @@ function StatsStrip() {
   );
 }
 
-/* -------------------------------- Featured --------------------------------- */
+/* -------------------------------- Featured (Hotels) ------------------------ */
 type HotelImage = { id: string; url: string; alt?: string | null };
 type Hotel = {
   id: string;
@@ -1043,7 +1113,7 @@ type Hotel = {
   city: string;
   price: number;
   rating: number | null;
-  capacity?: number | null;   // <-- include capacity from API
+  capacity?: number | null;
   images: HotelImage[];
 };
 
@@ -1057,7 +1127,7 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
     (async () => {
       setLoading(true);
       try {
-        const r = await fetch("/api/hotels", { credentials: "include" }); // keep cookies
+        const r = await fetch("/api/hotels", { credentials: "include" });
         if (!r.ok) {
           const maybeJson = await r.json().catch(() => null);
           const msg = maybeJson?.error ?? `HTTP ${r.status}`;
@@ -1078,10 +1148,7 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
     const totalGuests = (guests?.adults ?? 0) + (guests?.kids ?? 0);
     return items.filter((h) => {
       const cityOk = q ? h.city?.toLowerCase().includes(q) : true;
-      const capOk =
-        totalGuests > 0 && h.capacity != null
-          ? h.capacity >= totalGuests
-          : true; // if guests not set, don't filter by capacity
+      const capOk = totalGuests > 0 && h.capacity != null ? h.capacity >= totalGuests : true;
       return cityOk && capOk;
     });
   }, [items, cityFilter, guests]);
@@ -1092,7 +1159,7 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
         <h2 className="text-3xl font-bold">Featured Stays</h2>
         <p className="text-white/70 mb-6">
           Cinematic tilt, parallax, and glow
-          {((guests.adults + guests.kids) > 0) && ` • showing stays for ${guests.adults + guests.kids} guests`}
+          {(guests.adults + guests.kids > 0) && ` • showing stays for ${guests.adults + guests.kids} guests`}
           {cityFilter && ` • in ${cityFilter}`}
           .
         </p>
@@ -1100,19 +1167,12 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
         {loading && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-60 rounded-2xl bg-white/5 animate-pulse border border-white/10"
-              />
+              <div key={i} className="h-60 rounded-2xl bg-white/5 animate-pulse border border-white/10" />
             ))}
           </div>
         )}
 
-        {!loading && error && (
-          <div className="mt-2 text-red-400 text-base">
-            Couldn’t load hotels: {error}
-          </div>
-        )}
+        {!loading && error && <div className="mt-2 text-red-400 text-base">Couldn’t load hotels: {error}</div>}
 
         {!loading && !error && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -1133,9 +1193,7 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
                       loading="lazy"
                     />
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                    <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">
-                      {h.city}
-                    </div>
+                    <div className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs">{h.city}</div>
                   </div>
 
                   <div className="p-4">
@@ -1170,13 +1228,54 @@ function Featured({ cityFilter, guests }: { cityFilter: string; guests: Guests }
   );
 }
 
-/* --------------------------------- Events ---------------------------------- */
-function EventStrip() {
-  const ev = [
-    { title: "Arena Night: The Tour", sub: "Doha • Aug 28", img: "/images/event_arena.jpeg" },
-    { title: "Old Town Theatre",      sub: "Matinee • Daily", img: "/images/event_theatre.avif" },
-    { title: "Rooftop Cinema",        sub: "Fridays 8pm",     img: "/images/event_rooftop.jpeg" },
-  ];
+/* ----------------------------- Events (Dynamic) ---------------------------- */
+type EventRow = {
+  id: number;
+  name: string;
+  description: string;
+  location: string;
+  startsAt: string; // ISO from API
+  price: number;
+  capacity: number;
+  imageUrl: string;
+  imageAlt?: string | null;
+};
+
+function fmtEventWhen(iso: string) {
+  // Localize for the user's browser/OS. If you want Qatar always, pass timeZone: "Asia/Qatar".
+  const d = new Date(iso);
+  const day = d.toLocaleDateString(undefined, { weekday: "short" });
+  const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${day} • ${date} • ${time}`;
+}
+
+function EventsGrid() {
+  const navigate = useNavigate();
+  const [events, setEvents] = useState<EventRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const r = await fetch("/api/events", { credentials: "include" });
+        if (!r.ok) {
+          const maybe = await r.json().catch(() => null);
+          throw new Error(maybe?.error ?? `HTTP ${r.status}`);
+        }
+        const data: EventRow[] = await r.json();
+        // optional: sort by startsAt asc
+        data.sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
+        setEvents(data);
+      } catch (e: any) {
+        setErr(e?.message || "Failed to load events");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   return (
     <section className="px-6 pb-24 text-white">
@@ -1185,33 +1284,60 @@ function EventStrip() {
           <h2 className="text-3xl font-bold">Tonight in the City</h2>
           <p className="text-white/70">Curated events with motion-blur slides.</p>
         </div>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {ev.map((e) => (
-            <TiltCard key={e.title}>
-              <motion.a
-                href="#"
-                className="group relative block overflow-hidden rounded-3xl border border-white/10 bg-white/5"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-              >
-                <motion.img
-                  src={e.img}
-                  onError={(img) => { (img.currentTarget as HTMLImageElement).src = "/images/fallback.jpg"; }}
-                  alt={e.title}
-                  className="h-60 w-full object-cover"
-                  whileHover={{ scale: 1.1, filter: "blur(1px)" }}
-                  transition={{ duration: 0.6 }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/0" />
-                <div className="absolute inset-x-4 bottom-4">
-                  <div className="text-sm text-white/70">{e.sub}</div>
-                  <div className="text-xl font-semibold">{e.title}</div>
-                </div>
-              </motion.a>
-            </TiltCard>
-          ))}
-        </div>
+
+        {loading && (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-60 rounded-3xl border border-white/10 bg-white/5 animate-pulse" />
+            ))}
+          </div>
+        )}
+
+        {!loading && err && (
+          <div className="text-red-400 text-base">Couldn’t load events: {err}</div>
+        )}
+
+        {!loading && !err && (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {events.map((e) => (
+              <TiltCard key={e.id}>
+                <motion.button
+                  type="button"
+                  onClick={() => navigate(`/events/${e.id}`)}
+                  className="group relative block w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 text-left"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  title={`View details for ${e.name}`}
+                >
+                  <motion.img
+                    src={e.imageUrl || "/images/fallback.jpg"}
+                    onError={(img) => {
+                      (img.currentTarget as HTMLImageElement).src = "/images/fallback.jpg";
+                    }}
+                    alt={e.imageAlt ?? e.name}
+                    className="h-60 w-full object-cover"
+                    whileHover={{ scale: 1.1, filter: "blur(1px)" }}
+                    transition={{ duration: 0.6 }}
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/0" />
+                  <div className="absolute inset-x-4 bottom-4">
+                    <div className="text-sm text-white/70">
+                      {fmtEventWhen(e.startsAt)} • {e.location}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-xl font-semibold">{e.name}</div>
+                      <div className="rounded-full bg-black/60 px-3 py-1 text-xs">
+                        From ${e.price}
+                      </div>
+                    </div>
+                  </div>
+                </motion.button>
+              </TiltCard>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -1221,16 +1347,16 @@ function EventStrip() {
 export default function RedRouteLandingUltra() {
   const navigate = useNavigate();
 
-  // Stop any videos from earlier pages
   useEffect(() => {
     document.querySelectorAll<HTMLVideoElement>("video").forEach((v) => {
       v.pause();
       v.removeAttribute("src");
-      try { v.load(); } catch {}
+      try {
+        v.load();
+      } catch {}
     });
   }, []);
 
-  // Controlled filters
   const [cityFilter, setCityFilter] = useState("");
   const [guestsFilter, setGuestsFilter] = useState<Guests>({ adults: 2, kids: 0 });
 
@@ -1240,7 +1366,6 @@ export default function RedRouteLandingUltra() {
       localStorage.removeItem("rr_guest");
       localStorage.removeItem("rr_name");
       localStorage.removeItem("rr_email");
-      // clear auth cookies used by API
       deleteCookie("uid");
       deleteCookie("userId");
       deleteCookie("user_id");
@@ -1262,13 +1387,17 @@ export default function RedRouteLandingUltra() {
         <LogOut className="size-4" /> Logout
       </button>
 
-      {/* Pass city + guests filters into Hero */}
+      {/* Hero */}
       <Hero city={cityFilter} setCity={setCityFilter} guests={guestsFilter} setGuests={setGuestsFilter} />
       <StatsStrip />
-      {/* Featured renders with filtering by city + capacity */}
+
+      {/* Hotels */}
       <Featured cityFilter={cityFilter} guests={guestsFilter} />
+
+      {/* Events (now dynamic from DB) */}
       <KenBurnsShowcase />
-      <EventStrip />
+      <EventsGrid />
+
       <Testimonials />
       <SiteFooter />
 

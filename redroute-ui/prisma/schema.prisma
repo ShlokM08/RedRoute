@@ -9,16 +9,17 @@ datasource db {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  passwordHash String
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  dob          DateTime?
-  firstName    String?
-  lastName     String?
-  bookings     Booking[]
-  favorites    Favorite[]
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  dob           DateTime?
+  firstName     String?
+  lastName      String?
+  bookings      Booking[]
+  eventBookings EventBooking[]
+  favorites     Favorite[]
 }
 
 model Hotel {
@@ -45,23 +46,18 @@ model HotelImage {
 }
 
 model Booking {
-  id           Int      @id @default(autoincrement())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
-
+  createdAt    DateTime @default(now())
+  id           Int      @id @default(autoincrement())
   hotelId      Int
-  hotel        Hotel    @relation(fields: [hotelId], references: [id])
-
   checkIn      DateTime
   checkOut     DateTime
-
-  // NEW:
-  guests       Int      @default(1)     // number of guests staying
-  contactName  String?                  // optional: person making the booking
-  contactEmail String?                  // optional: email for confirmation
-  totalCost    Int      @default(0) 
-
-  createdAt    DateTime @default(now())
+  contactEmail String?
+  contactName  String?
+  guests       Int      @default(1)
+  totalCost    Int      @default(0)
+  hotel        Hotel    @relation(fields: [hotelId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
 }
 
 model Favorite {
@@ -73,4 +69,37 @@ model Favorite {
   user      User     @relation(fields: [userId], references: [id])
 
   @@unique([hotelId, userId])
+}
+
+model Event {
+  id          Int            @id @default(autoincrement())
+  name        String
+  description String
+  location    String
+  startsAt    DateTime       @db.Timestamptz(6)
+  price       Int
+  capacity    Int            @default(100)
+  imageUrl    String
+  imageAlt    String?
+  createdAt   DateTime       @default(now()) @db.Timestamptz(6)
+  bookings    EventBooking[]
+
+  @@unique([name, startsAt])
+  @@index([startsAt])
+}
+
+model EventBooking {
+  id           Int      @id @default(autoincrement())
+  userId       String
+  eventId      Int
+  qty          Int      @default(1)
+  totalCost    Int      @default(0)
+  contactName  String?
+  contactEmail String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  event        Event    @relation(fields: [eventId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([eventId])
+  @@index([userId])
 }
