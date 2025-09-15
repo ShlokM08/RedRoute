@@ -1,9 +1,9 @@
-import  { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { Calendar, MapPin, Minus, Plus } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
+import { Calendar, MapPin, Minus, Plus, CheckCircle2 } from "lucide-react";
 import { Button } from "./components/ui/button";
 
-/** Small helpers */
+/** Cookie + auth helpers */
 function parseCookie(name: string) {
   const m = document.cookie.match(
     new RegExp("(^| )" + encodeURIComponent(name) + "=([^;]+)")
@@ -12,11 +12,9 @@ function parseCookie(name: string) {
 }
 
 async function ensureAuthHeaders(): Promise<Record<string, string> | null> {
-  // Try cookies first
   let uid = parseCookie("uid");
   let email = parseCookie("email");
 
-  // If missing, try to hydrate from /api/auth/me (same-origin, send cookies)
   if (!uid || !email) {
     try {
       const r = await fetch("/api/auth/me", { credentials: "include" });
@@ -53,15 +51,29 @@ type EventData = {
   imageAlt?: string | null;
 };
 
+type EventBooking = {
+  id: number;
+  eventId: number;
+  userId: string;
+  qty: number;
+  totalCost: number;
+  contactName?: string | null;
+  contactEmail?: string | null;
+  createdAt: string; // ISO
+};
+
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
 
   const [ev, setEv] = useState<EventData | null>(null);
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // NEW: success state to stay on page with confirmation
+  const [confirmed, setConfirmed] = useState(false);
+  const [booking, setBooking] = useState<EventBooking | null>(null);
 
   const eventId = useMemo(() => Number(id), [id]);
 
@@ -71,7 +83,6 @@ export default function EventDetail() {
       setLoading(true);
       setErr(null);
       try {
-        // Same structure as your hotels API: /api/events/[id]
         const r = await fetch(`/api/events/${eventId}`, {
           credentials: "include",
         });
@@ -115,15 +126,13 @@ export default function EventDetail() {
     setSubmitting(true);
     setErr(null);
     try {
-      // 1) Make sure we have auth headers (and cookies if needed)
       const headers = await ensureAuthHeaders();
       if (!headers) {
-        // No session — go to login, keep a redirect
-        navigate("/login");
+        setErr("Please sign in to continue.");
+        setSubmitting(false);
         return;
       }
 
-      // 2) POST to event bookings (same-origin, include cookies)
       const resp = await fetch("/api/event-bookings", {
         method: "POST",
         credentials: "include",
@@ -131,11 +140,9 @@ export default function EventDetail() {
         body: JSON.stringify({
           eventId: ev.id,
           qty,
-          // contact details are derived server-side from the user if not supplied
         }),
       });
 
-      // 3) Decode result safely
       const text = await resp.text();
       let data: any = {};
       try {
@@ -148,8 +155,9 @@ export default function EventDetail() {
         throw new Error(data?.error ?? `HTTP ${resp.status}`);
       }
 
-      // Success — you could navigate to a confirmation page or /home
-      navigate("/home");
+      // Success: show confirmation right here and do NOT navigate away
+      setBooking(data?.booking ?? null);
+      setConfirmed(true);
     } catch (e: any) {
       setErr(e?.message || "Failed to complete purchase");
     } finally {
@@ -188,7 +196,7 @@ export default function EventDetail() {
             />
           </div>
           <h1 className="text-3xl font-bold mb-1">{ev.name}</h1>
-          <div className="text-white/80 mb-3 flex items-center gap-3">
+          <div className="text-white/80 mb-3 flex flex-wrap items-center gap-3">
             <span className="inline-flex items-center gap-2">
               <Calendar className="w-4 h-4" /> {dateLabel}
             </span>
@@ -197,59 +205,127 @@ export default function EventDetail() {
             </span>
           </div>
           <p className="text-white/85 leading-relaxed">{ev.description}</p>
+
+          {/* Success ribbon (desktop wide) */}
+          {confirmed && (
+            <div className="mt-6 rounded-2xl border border-green-600/30 bg-green-600/15 p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" />
+                <div>
+                  <div className="text-lg font-semibold text-green-400">
+                    Tickets confirmed!
+                  </div>
+                  <div className="text-white/85">
+                    You’re all set for <strong>{ev.name}</strong> on{" "}
+                    <strong>{dateLabel}</strong>.
+                    {booking?.contactEmail ? (
+                      <> A confirmation email was sent to <strong>{booking.contactEmail}</strong>.</>
+                    ) : null}
+                  </div>
+                  {booking && (
+                    <div className="mt-2 text-sm text-white/70">
+                      Reference: <span className="font-mono">{booking.id}</span>{" "}
+                      • Qty: <strong>{booking.qty}</strong> • Paid:{" "}
+                      <strong>${booking.totalCost}</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right: purchase card */}
         <aside className="rounded-3xl border border-white/10 bg-white/5 p-5 h-fit">
-          <div className="text-sm text-white/80 mb-2">Amount due</div>
-          <div className="text-4xl font-extrabold mb-4">${total}</div>
+          {!confirmed ? (
+            <>
+              <div className="text-sm text-white/80 mb-2">Amount due</div>
+              <div className="text-4xl font-extrabold mb-4">${total}</div>
 
-          <div className="mb-4 rounded-2xl border border-white/10 p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-white/85">Tickets</div>
-              <div className="flex items-center gap-2">
-                <button
-                  aria-label="decrement"
-                  onClick={() => setQty((q) => Math.max(1, q - 1))}
-                  className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white/10 hover:bg-white/20"
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <div className="w-6 text-center">{qty}</div>
-                <button
-                  aria-label="increment"
-                  onClick={() => setQty((q) => Math.min(10, q + 1))}
-                  className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white/10 hover:bg-white/20"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+              <div className="mb-4 rounded-2xl border border-white/10 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-white/85">Tickets</div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      aria-label="decrement"
+                      onClick={() => setQty((q) => Math.max(1, q - 1))}
+                      className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white/10 hover:bg-white/20"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <div className="w-6 text-center">{qty}</div>
+                    <button
+                      aria-label="increment"
+                      onClick={() => setQty((q) => Math.min(10, q + 1))}
+                      className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white/10 hover:bg-white/20"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between text-white/80">
+                  <span>
+                    ${ev.price} × {qty} ticket{qty > 1 ? "s" : ""}
+                  </span>
+                  <span>${total}</span>
+                </div>
+              </div>
+
+              <Button
+                disabled={submitting}
+                className="w-full h-11 rounded-xl font-semibold"
+                style={{ background: "#E50914" }}
+                onClick={handlePay}
+              >
+                {submitting ? "Processing…" : "Pay & Confirm"}
+              </Button>
+
+              {err && (
+                <div className="mt-3 text-sm text-red-400 break-words">{err}</div>
+              )}
+
+              <div className="mt-4 text-xs text-white/60">
+                By confirming, you agree to our Terms and Cancellation Policy.
+              </div>
+            </>
+          ) : (
+            // After success: lock the panel and show a clear confirmation
+            <div className="text-center">
+              <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
+              <div className="text-xl font-bold">Tickets confirmed</div>
+              <div className="mt-1 text-white/80">
+                Enjoy the show! Your purchase details are saved below.
+              </div>
+
+              <div className="mt-4 rounded-xl border border-white/10 p-4 text-left">
+                <div className="flex items-center justify-between">
+                  <span className="text-white/70">Event</span>
+                  <span className="font-medium">{ev.name}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-white/70">When</span>
+                  <span className="font-medium">{dateLabel}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-white/70">Tickets</span>
+                  <span className="font-medium">{booking?.qty ?? qty}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-white/70">Total paid</span>
+                  <span className="font-medium">
+                    ${booking?.totalCost ?? total}
+                  </span>
+                </div>
+                {booking?.id && (
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-white/70">Reference</span>
+                    <span className="font-mono">{booking.id}</span>
+                  </div>
+                )}
               </div>
             </div>
-
-            <div className="mt-3 flex items-center justify-between text-white/80">
-              <span>
-                ${ev.price} × {qty} ticket{qty > 1 ? "s" : ""}
-              </span>
-              <span>${total}</span>
-            </div>
-          </div>
-
-          <Button
-            disabled={submitting}
-            className="w-full h-11 rounded-xl font-semibold"
-            style={{ background: "#E50914" }}
-            onClick={handlePay}
-          >
-            {submitting ? "Processing…" : "Pay & Confirm"}
-          </Button>
-
-          {err && (
-            <div className="mt-3 text-sm text-red-400 break-words">{err}</div>
           )}
-
-          <div className="mt-4 text-xs text-white/60">
-            By confirming, you agree to our Terms and Cancellation Policy.
-          </div>
         </aside>
       </div>
     </div>
