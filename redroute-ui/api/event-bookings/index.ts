@@ -2,12 +2,20 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import prisma from "../_lib/prisma.js";
 
-type Body = {
-  eventId?: number | string;
-  qty?: number;
-  contactName?: string | null;   // optional; derived from user if absent
-  contactEmail?: string | null;  // optional; derived from user if absent
-};
+/** Parse cookies from request header */
+function parseCookies(cookieHeader?: string | string[] | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  const raw = Array.isArray(cookieHeader) ? cookieHeader.join("; ") : cookieHeader || "";
+  raw.split(";").forEach((part) => {
+    const i = part.indexOf("=");
+    if (i > -1) {
+      const k = decodeURIComponent(part.slice(0, i).trim());
+      const v = decodeURIComponent(part.slice(i + 1).trim());
+      if (k) out[k] = v;
+    }
+  });
+  return out;
+}
 
 function bad(res: VercelResponse, code: number, msg: string) {
   return res.status(code).json({ error: msg });
@@ -24,6 +32,13 @@ function fallbackNameFromEmail(email?: string | null) {
     .map(w => w[0]?.toUpperCase() + w.slice(1))
     .join(" ");
 }
+
+type Body = {
+  eventId?: number | string;
+  qty?: number;
+  contactName?: string | null;
+  contactEmail?: string | null;
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return bad(res, 405, "Use POST");
@@ -46,20 +61,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // identify user (same convention as hotel bookings)
+    // --------- Identify user from headers OR cookies ----------
+    const cookies = parseCookies(req.headers.cookie);
     const headerUserId =
       typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"].trim() : null;
     const headerEmail =
       typeof req.headers["x-user-email"] === "string" ? req.headers["x-user-email"].trim() : null;
 
+    const cookieUserId = cookies.uid || cookies.userId || cookies.user_id || null;
+    const cookieEmail = cookies.email || cookies.user_email || null;
+
+    const candidateUserId = headerUserId || cookieUserId;
+
     let userId: string | null = null;
-    let userEmail: string | null = headerEmail ?? null;
+    let userEmail: string | null = headerEmail || cookieEmail || null;
     let userFirst: string | null = null;
     let userLast: string | null = null;
 
-    if (headerUserId) {
+    if (candidateUserId) {
       const u = await prisma.user.findUnique({
-        where: { id: headerUserId },
+        where: { id: candidateUserId },
         select: { id: true, email: true, firstName: true, lastName: true },
       });
       if (u) {
@@ -69,18 +90,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         userLast = u.lastName ?? null;
       }
     }
+
     if (!userId) return bad(res, 401, "Not authenticated");
 
-    // load event
+    // --------- Load event ----------
     const ev = await prisma.event.findUnique({
       where: { id: eventIdNum },
       select: { id: true, name: true, price: true, capacity: true, startsAt: true },
     });
     if (!ev) return bad(res, 404, "Event not found");
 
-    // capacity check: sum of qty already reserved for this event
+    // --------- Capacity check ----------
     const agg = await prisma.eventBooking.aggregate({
-      where: { eventId: eventIdNum },
+      where: { eventId: ev.id },
       _sum: { qty: true },
     });
     const already = agg._sum.qty ?? 0;
@@ -89,7 +111,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return bad(res, 409, `Only ${remaining} seats remaining for this event`);
     }
 
-    // derive contact fields if caller didn't send
+    // --------- Derive contact fields if needed ----------
     const defaultName =
       (userFirst || userLast)
         ? [userFirst, userLast].filter(Boolean).join(" ").trim()
@@ -97,9 +119,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const finalContactName = body.contactName ?? defaultName ?? null;
     const finalContactEmail = body.contactEmail ?? userEmail ?? null;
 
-    // compute total
+    // --------- Compute total ----------
     const totalCost = ev.price * qty;
 
+    // --------- Create booking ----------
     const booking = await prisma.eventBooking.create({
       data: {
         userId,
@@ -122,8 +145,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     return res.status(201).json({ ok: true, booking });
-  } catch (e: any) {
-    console.error("POST /api/event-bookings error:", e);
-    return bad(res, 500, e?.message || "Server error");
+  } catch (err: any) {
+    console.error("Create event booking error:", err);
+    const code = err?.code ? ` (code ${err.code})` : "";
+    return bad(res, 500, `Server error${code}`);
   }
 }
