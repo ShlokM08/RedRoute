@@ -48,9 +48,15 @@ function deleteCookie(name: string) {
 /* ------------------------ KEN BURNS SHOWCASE MARQUEE ----------------------- */
 function KenBurnsShowcase() {
   const slides = [
-    { img: "/images/event_arena.jpeg", title: "Arena Night", sub: "Citywide tour" },
-    { img: "/images/event_rooftop.jpeg", title: "Rooftop Cinema", sub: "Fridays 8pm" },
-    { img: "/images/event_theatre.avif", title: "Old Town Theatre", sub: "Matinee daily" },
+    { img: "/images/event_arena.jpeg", title: "Arena Night: The Tour"},
+    { img: "/images/event_rooftop.png", title: "Rooftop Cinema"  },
+    { img: "/images/event_theatre.jpg", title: "Old Town Theatre" },
+    { img: "/images/jazz_concert.jpg", title: "Jazz Under The Stars" },
+    { img: "/images/citylights_fest.jpeg", title: "City Lights Festival" },
+    { img: "/images/tech_expo.jpeg", title: "Tech Expo Live" },
+    { img: "/images/summer_party.jpeg", title: "Summer Beats Block Party" },
+
+
   ];
   const seq = [...slides, ...slides];
 
@@ -73,7 +79,6 @@ function KenBurnsShowcase() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/0" />
               <div className="absolute bottom-3 left-4">
-                <div className="text-sm text-white/80">{s.sub}</div>
                 <div className="text-xl font-semibold">{s.title}</div>
               </div>
             </div>
