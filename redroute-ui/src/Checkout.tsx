@@ -1,7 +1,8 @@
 // src/Checkout.tsx
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, CheckCircle2 } from "lucide-react";
+import confetti from "canvas-confetti";
 
 /* ---------- auth/meta helper ---------- */
 async function getMe() {
@@ -14,7 +15,6 @@ async function getMe() {
   const lastName = me?.user?.lastName ?? me?.lastName ?? null;
   return { id, email, firstName, lastName };
 }
-
 function authHeadersFrom(me: { id?: string | null; email?: string | null }) {
   const h: Record<string, string> = {};
   if (me.id) h["x-user-id"] = String(me.id);
@@ -29,6 +29,7 @@ function parseYMD(ymd: string) {
 }
 const MS_PER_NIGHT = 24 * 60 * 60 * 1000;
 
+/* ---------- types ---------- */
 type CheckoutState = {
   hotelId: number;
   name?: string;
@@ -39,9 +40,7 @@ type CheckoutState = {
   checkOut: string;   // YYYY-MM-DD
   guests: number;
 };
-
 type Hotel = { id: number; name: string; city: string; price: number; images?: { url: string }[] };
-
 type CreatedBooking = {
   id: number;
   userId: string;
@@ -55,113 +54,12 @@ type CreatedBooking = {
   createdAt: string;
 };
 
-/* ----------------------- Confetti Overlay -----------------------
-   Lightweight CSS confetti — bursts from top/bottom/left/right.
-   Mount for ~1.4s, then unmount. No external libs required.
-------------------------------------------------------------------*/
-function FourSideConfetti({ show, onDone, duration = 1400 }: {
-  show: boolean;
-  onDone?: () => void;
-  duration?: number;
-}) {
-  const [seed, setSeed] = useState(0);
-
-  useEffect(() => {
-    if (!show) return;
-    setSeed(Date.now());
-    const t = setTimeout(() => onDone?.(), duration);
-    return () => clearTimeout(t);
-  }, [show, duration, onDone]);
-
-  if (!show) return null;
-
-  const colors = ["#E50914", "#ffffff", "#ffd166", "#06d6a0", "#118ab2", "#ef476f"];
-  const piecesPerSide = 28;
-  const makePieces = (side: "top" | "bottom" | "left" | "right") => {
-    const arr = Array.from({ length: piecesPerSide });
-    return arr.map((_, i) => {
-      // random helpers (seed only to vary on re-mount)
-      const rand = (min: number, max: number) => {
-        const x = Math.sin(seed + i * 999 + (side === "top" ? 1 : side === "right" ? 2 : side === "bottom" ? 3 : 4)) * 0.5 + 0.5;
-        return min + (max - min) * (Math.random() * 0.7 + 0.3) * x;
-      };
-
-      // Start positions & end offsets by side
-      let x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-      if (side === "top") {
-        x0 = rand(5, 95); y0 = -6;
-        x1 = x0 + rand(-20, 20); y1 = 110;
-      } else if (side === "bottom") {
-        x0 = rand(5, 95); y0 = 106;
-        x1 = x0 + rand(-20, 20); y1 = -10;
-      } else if (side === "left") {
-        x0 = -6; y0 = rand(10, 90);
-        x1 = 108; y1 = y0 + rand(-18, 18);
-      } else {
-        x0 = 106; y0 = rand(10, 90);
-        x1 = -10; y1 = y0 + rand(-18, 18);
-      }
-
-      const size = rand(6, 10);
-      const rot0 = rand(0, 180);
-      const rot1 = rot0 + rand(360, 1080);
-      const delay = rand(0, 180); // ms
-      const color = colors[i % colors.length];
-
-      const style = {
-        // percent-based positions fed into keyframes via CSS variables
-        // we use viewport units by putting values as percentages of viewport
-        // and let the keyframes translate them.
-        // @ts-ignore – CSS custom props
-        "--x0": `${x0}vw`,
-        "--y0": `${y0}vh`,
-        "--x1": `${x1}vw`,
-        "--y1": `${y1}vh`,
-        "--r0": `${rot0}deg`,
-        "--r1": `${rot1}deg`,
-        "--dur": `${duration}ms`,
-        "--delay": `${delay}ms`,
-        background: color,
-        width: `${size}px`,
-        height: `${size * 0.6}px`,
-      } as React.CSSProperties;
-
-      return <div key={`${side}-${i}`} className="rr-confetti-piece" style={style} />;
-    });
-  };
-
-  return (
-    <>
-      <div className="rr-confetti fixed inset-0 pointer-events-none z-[9999]">
-        {["top","right","bottom","left"].map((s) => makePieces(s as any))}
-      </div>
-      <style>{`
-        .rr-confetti-piece {
-          position: fixed;
-          top: 0; left: 0;
-          transform: translate(var(--x0), var(--y0)) rotate(var(--r0));
-          opacity: 0.95;
-          border-radius: 2px;
-          animation: rr-fly var(--dur) ease-out forwards;
-          animation-delay: var(--delay);
-          box-shadow: 0 0 0.5px rgba(0,0,0,.15);
-        }
-        @keyframes rr-fly {
-          0%   { transform: translate(var(--x0), var(--y0)) rotate(var(--r0)); opacity: 1; }
-          100% { transform: translate(var(--x1), var(--y1)) rotate(var(--r1)); opacity: 0; }
-        }
-      `}</style>
-    </>
-  );
-}
-
 export default function Checkout() {
   const navigate = useNavigate();
   const { state } = useLocation() as { state?: CheckoutState };
 
   // 1) pull from router state
   let initial: Partial<CheckoutState> = state ?? {};
-
   // 2) else from sessionStorage
   if (!initial?.hotelId) {
     try {
@@ -169,12 +67,9 @@ export default function Checkout() {
       if (saved && typeof saved === "object") initial = { ...saved, ...initial };
     } catch {}
   }
-
   // 3) minimal query fallback
   const params = new URLSearchParams(location.search);
-  if (!initial.hotelId && params.get("hotelId")) {
-    initial.hotelId = Number(params.get("hotelId"));
-  }
+  if (!initial.hotelId && params.get("hotelId")) initial.hotelId = Number(params.get("hotelId"));
   initial.checkIn  = initial.checkIn  ?? params.get("checkIn")  ?? "";
   initial.checkOut = initial.checkOut ?? params.get("checkOut") ?? "";
   if (!initial.guests && params.get("guests")) initial.guests = Number(params.get("guests"));
@@ -195,12 +90,61 @@ export default function Checkout() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // NEW: celebration + confirmation states
-  const [celebrating, setCelebrating] = useState(false);
+  // stay-on-page confirmation state + saved booking
   const [confirmed, setConfirmed] = useState(false);
   const [booking, setBooking] = useState<CreatedBooking | null>(null);
 
-  // Fetch hotel if price/name missing
+  /* -------- Confetti (canvas-confetti) -------- */
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const timersRef = useRef<number[]>([]);
+
+  // Fire a four-corner celebration then resolve
+  function runConfetti(duration = 1800): Promise<void> {
+    if (!canvasRef.current) return Promise.resolve();
+    const my = confetti.create(canvasRef.current, { resize: true, useWorker: true });
+    const end = Date.now() + duration;
+
+    return new Promise<void>((resolve) => {
+      function frame() {
+        const timeLeft = end - Date.now();
+        if (timeLeft <= 0) {
+          resolve();
+          return;
+        }
+        const base = Math.max(12, Math.floor(28 * (timeLeft / duration)));
+        const opts = {
+          startVelocity: 52,
+          ticks: 160,
+          spread: 70,
+          gravity: 0.9,
+          scalar: 1,
+          zIndex: 10000,
+        };
+
+        // bottom-left → up-right
+        my({ ...opts, particleCount: base, angle: 60,  origin: { x: 0.02, y: 1.00 } });
+        // bottom-right → up-left
+        my({ ...opts, particleCount: base, angle: 120, origin: { x: 0.98, y: 1.00 } });
+        // top-left → down-right
+        my({ ...opts, particleCount: base, angle: 300, origin: { x: 0.02, y: 0.00 } });
+        // top-right → down-left
+        my({ ...opts, particleCount: base, angle: 240, origin: { x: 0.98, y: 0.00 } });
+
+        timersRef.current.push(window.setTimeout(frame, 140));
+      }
+      frame();
+    });
+  }
+
+  // cleanup timers/canvas on unmount
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach((t) => clearTimeout(t));
+      timersRef.current = [];
+    };
+  }, []);
+
+  /* -------- data prefill -------- */
   useEffect(() => {
     (async () => {
       if (!hotelId) return;
@@ -217,7 +161,6 @@ export default function Checkout() {
     })();
   }, [hotelId, name, price]);
 
-  // Fetch me to prefill contact and to get headers for /api/bookings
   const [me, setMe] = useState<{ id?: string | null; email?: string | null } | null>(null);
   useEffect(() => {
     (async () => {
@@ -227,9 +170,7 @@ export default function Checkout() {
         const full = [m.firstName, m.lastName].filter(Boolean).join(" ").trim();
         setContactName(full || (m.email ? m.email.split("@")[0] : ""));
         setContactEmail(m.email || "");
-      } catch {
-        // if not authed, RequireAuth will likely have redirected already
-      }
+      } catch {}
     })();
   }, []);
 
@@ -255,7 +196,6 @@ export default function Checkout() {
 
       setBusy(true);
 
-      // (Stripe would go here, we proceed to booking for now)
       const r = await fetch("/api/bookings", {
         method: "POST",
         headers: {
@@ -275,18 +215,15 @@ export default function Checkout() {
 
       const raw = await r.text();
       const payload = raw ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : null;
-
       if (!r.ok) throw new Error(payload?.error || `Payment/booking failed (HTTP ${r.status})`);
 
-      // NEW: Play confetti first, then show confirmation panel/message
+      // Save booking
       setBooking(payload?.booking ?? null);
-      setCelebrating(true);
-      // Wait for confetti to finish before revealing the panel & message
-      setTimeout(() => {
-        setCelebrating(false);
-        setConfirmed(true);
-        setMsg({ ok: true, text: "Payment successful! Your booking is confirmed." });
-      }, 1400);
+
+      // Confetti first, then show confirmation panel (stays on page)
+      await runConfetti(1800);
+      setConfirmed(true);
+      setMsg({ ok: true, text: "Payment successful! Your booking is confirmed." });
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
     } finally {
@@ -296,8 +233,12 @@ export default function Checkout() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Confetti overlay (mounts only when celebrating) */}
-      <FourSideConfetti show={celebrating} />
+      {/* Fullscreen confetti canvas (only in DOM when needed) */}
+      <canvas
+        ref={canvasRef}
+        className="fixed inset-0 pointer-events-none z-[9999]"
+        style={{ display: "block" }}
+      />
 
       <div className="mx-auto max-w-4xl p-6">
         <button
@@ -351,7 +292,7 @@ export default function Checkout() {
               </div>
             )}
 
-            {/* Confirmation panel — appears only after confetti completes */}
+            {/* Confirmation panel */}
             {confirmed && (
               <div className="mt-5 rounded-2xl border border-green-600/30 bg-green-600/15 p-4">
                 <div className="flex items-start gap-3">
