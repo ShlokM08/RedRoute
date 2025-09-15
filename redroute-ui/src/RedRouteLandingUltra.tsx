@@ -104,7 +104,7 @@ function Field({
 }
 
 /* ----------------------------- TILT CARD ----------------------------------- */
-function TiltCard({ children }: { children: React.ReactNode }) {
+/*function TiltCard({ children }: { children: React.ReactNode }) {
   const rx = useSpring(0, { stiffness: 120, damping: 12 });
   const ry = useSpring(0, { stiffness: 120, damping: 12 });
 
@@ -126,7 +126,7 @@ function TiltCard({ children }: { children: React.ReactNode }) {
       {children}
     </motion.div>
   );
-}
+}*/
 
 /* ------------------------- SCROLL PROGRESS BAR ----------------------------- */
 function ScrollProgress() {
