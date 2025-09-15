@@ -3,19 +3,26 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 
-/* ---------- same helper you used earlier to send x-user-id / email ---------- */
-async function getAuthHeaders(): Promise<Record<string, string>> {
+/* ---------- auth/meta helper ---------- */
+async function getMe() {
   const r = await fetch("/api/auth/me", { credentials: "include" });
   if (!r.ok) throw new Error("Not authenticated");
   const me = await r.json().catch(() => ({}));
   const id = me?.user?.id ?? me?.id ?? null;
   const email = me?.user?.email ?? me?.email ?? null;
-  if (id) return { "x-user-id": String(id) };
-  if (email) return { "x-user-email": String(email) };
-  throw new Error("Not authenticated");
+  const firstName = me?.user?.firstName ?? me?.firstName ?? null;
+  const lastName  = me?.user?.lastName  ?? me?.lastName  ?? null;
+  return { id, email, firstName, lastName };
 }
 
-/* ---------------------- robust date math (DST safe) ----------------------- */
+function authHeadersFrom(me: { id?: string | null; email?: string | null }) {
+  const h: Record<string, string> = {};
+  if (me.id) h["x-user-id"] = String(me.id);
+  if (me.email) h["x-user-email"] = String(me.email);
+  return h;
+}
+
+/* ---------- date helpers (UTC to avoid DST issues) ---------- */
 function parseYMD(ymd: string) {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
@@ -39,47 +46,74 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { state } = useLocation() as { state?: CheckoutState };
 
-  // Fallback: allow opening /checkout?hotelId=..&checkIn=..&checkOut=..&guests=..
-  const params = new URLSearchParams(location.search);
-  const fromQuery: Partial<CheckoutState> = {
-    hotelId: Number(params.get("hotelId") || NaN),
-    checkIn: params.get("checkIn") || undefined,
-    checkOut: params.get("checkOut") || undefined,
-    guests: Number(params.get("guests") || NaN),
-  };
+  // 1) pull from router state
+  let initial: Partial<CheckoutState> = state ?? {};
 
-  const initial: Partial<CheckoutState> = { ...(state ?? {}), ...fromQuery };
-  const [hotelId]   = useState<number>(Number(initial.hotelId));
+  // 2) else from sessionStorage
+  if (!initial?.hotelId) {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem("rr_checkout") || "null");
+      if (saved && typeof saved === "object") initial = { ...saved, ...initial };
+    } catch {}
+  }
+
+  // 3) minimal query fallback
+  const params = new URLSearchParams(location.search);
+  if (!initial.hotelId && params.get("hotelId")) {
+    initial.hotelId = Number(params.get("hotelId"));
+  }
+  initial.checkIn  = initial.checkIn  ?? params.get("checkIn")  ?? "";
+  initial.checkOut = initial.checkOut ?? params.get("checkOut") ?? "";
+  if (!initial.guests && params.get("guests")) initial.guests = Number(params.get("guests"));
+
+  const [hotelId]   = useState<number>(Number(initial.hotelId || 0));
   const [checkIn]   = useState<string>(String(initial.checkIn || ""));
   const [checkOut]  = useState<string>(String(initial.checkOut || ""));
   const [guests]    = useState<number>(Number(initial.guests || 1));
-  const [name, setName]   = useState<string>(initial.name || "");
-  const [city, setCity]   = useState<string>(initial.city || "");
+  const [name,  setName]  = useState<string>(initial.name || "");
+  const [city,  setCity]  = useState<string>(initial.city || "");
   const [image, setImage] = useState<string>(initial.image || "/images/featured_hotel.avif");
   const [price, setPrice] = useState<number | undefined>(initial.price);
+
+  // contact derived from /api/auth/me
+  const [contactName, setContactName] = useState<string>("");
+  const [contactEmail, setContactEmail] = useState<string>("");
 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // If we didn't get hotel name/price from state, fetch it
+  // Fetch hotel if price/name missing
   useEffect(() => {
     (async () => {
       if (!hotelId) return;
       if (name && price != null) return;
       try {
         const r = await fetch(`/api/hotels/${hotelId}`, { credentials: "include" });
-        if (!r.ok) throw new Error(`Hotel ${hotelId} not found`);
+        if (!r.ok) throw new Error();
         const h: Hotel = await r.json();
         setName(h.name);
         setCity(h.city);
         setPrice(h.price);
         if (h.images?.[0]?.url) setImage(h.images[0].url);
-      } catch (e) {
-        // fall back gracefully; user can still pay if price was passed in
-        console.warn("Could not fetch hotel details:", e);
-      }
+      } catch {}
     })();
   }, [hotelId, name, price]);
+
+  // Fetch me to prefill contact and to get headers for /api/bookings
+  const [me, setMe] = useState<{ id?: string | null; email?: string | null } | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const m = await getMe();
+        setMe({ id: m.id, email: m.email });
+        const full = [m.firstName, m.lastName].filter(Boolean).join(" ").trim();
+        setContactName(full || (m.email ? m.email.split("@")[0] : ""));
+        setContactEmail(m.email || "");
+      } catch {
+        // if not authed, RequireAuth will likely have redirected already
+      }
+    })();
+  }, []);
 
   // compute nights safely (min 1)
   const nights = useMemo(() => {
@@ -99,19 +133,25 @@ export default function Checkout() {
     try {
       setMsg(null);
       if (!valid) throw new Error("Missing or invalid booking details.");
+      if (!me) throw new Error("Not authenticated.");
+
       setBusy(true);
 
-      // (Here is where you'd run Stripe; skipping to booking create for now)
-      const headers = await getAuthHeaders();
+      // (Stripe would go here, we proceed to booking for now)
       const r = await fetch("/api/bookings", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...headers },
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeadersFrom(me),
+        },
         credentials: "include",
         body: JSON.stringify({
           hotelId,
           checkIn,
           checkOut,
           guests,
+          contactName: contactName || null,
+          contactEmail: contactEmail || null,
         }),
       });
 
@@ -122,8 +162,7 @@ export default function Checkout() {
       if (!r.ok) throw new Error(payload?.error || `Payment/booking failed (HTTP ${r.status})`);
 
       setMsg({ ok: true, text: "Payment successful! Your booking is confirmed." });
-      // Optional: navigate to a confirmation page
-      // navigate(`/booking/${payload.booking.id}`);
+      // navigate(`/booking/${payload.booking.id}`) // optional
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
     } finally {
@@ -142,7 +181,7 @@ export default function Checkout() {
         </button>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {/* Summary card */}
+          {/* Summary */}
           <div className="md:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-5">
             <div className="flex items-start gap-4">
               <img
@@ -165,10 +204,13 @@ export default function Checkout() {
 
             <div className="mt-5 rounded-xl border border-white/10 bg-black/30 p-4">
               <div className="flex items-center justify-between text-sm">
-                <span>{price != null ? `$${price} × ${nights} night${nights !== 1 ? "s" : ""}` : "Price"}</span>
+                <span>
+                  {price != null
+                    ? `$${price} × ${nights} night${nights !== 1 ? "s" : ""}`
+                    : "Price"}
+                </span>
                 <span className="font-semibold">${subtotal.toLocaleString()}</span>
               </div>
-              {/* add taxes/fees here if you want */}
               <div className="mt-3 border-t border-white/10 pt-3 flex items-center justify-between">
                 <span className="text-base font-semibold">Total</span>
                 <span className="text-lg font-bold">${subtotal.toLocaleString()}</span>
@@ -184,12 +226,23 @@ export default function Checkout() {
 
           {/* Pay box */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5 h-fit">
-            <div className="text-sm text-white/80 mb-2">Amount due</div>
-            <div className="text-3xl font-bold mb-5">
-              ${subtotal.toLocaleString()}
-            </div>
+            <div className="text-sm text-white/80 mb-2">Contact</div>
+            <input
+              className="mb-2 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+              placeholder="Contact name"
+              value={contactName}
+              onChange={(e) => setContactName(e.target.value)}
+            />
+            <input
+              className="mb-4 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+              placeholder="Contact email"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+            />
 
-            {/* Replace this with Stripe Elements later */}
+            <div className="text-sm text-white/80 mb-2">Amount due</div>
+            <div className="text-3xl font-bold mb-5">${subtotal.toLocaleString()}</div>
+
             <button
               disabled={!valid || busy}
               onClick={payAndBook}
@@ -200,7 +253,9 @@ export default function Checkout() {
             </button>
 
             {!valid && (
-              <div className="mt-3 text-xs text-red-400">Missing/invalid details. Go back and pick dates again.</div>
+              <div className="mt-3 text-xs text-red-400">
+                Missing/invalid details. Go back and pick dates again.
+              </div>
             )}
 
             <div className="mt-5 text-xs text-white/60">

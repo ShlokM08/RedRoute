@@ -326,24 +326,32 @@ export default function HotelDetail() {
 
 async function reserve() {
   if (!hotel || !id) return;
+
   if (!datesValid) {
-    setReserveMsg({ ok: false, text: "Please select a valid date range." });
+    setReserveMsg?.({ ok: false, text: "Please select a valid date range." });
     return;
   }
   const totalGuests = Math.max(1, Math.min(cap, guests));
-  navigate("/checkout", {
-    state: {
-      hotelId: Number(id),
-      name: hotel.name,
-      city: hotel.city,
-      image: hotel.images?.[0]?.url || "/images/featured_hotel.avif",
-      price: hotel.price,          // nightly
-      checkIn,
-      checkOut,
-      guests: totalGuests,
-    },
-  });
+
+  // Build payload we’ll need in /checkout
+  const payload = {
+    hotelId: Number(id),
+    name: hotel.name,
+    city: hotel.city,
+    image: hotel.images?.[0]?.url || "/images/featured_hotel.avif",
+    price: hotel.price,          // nightly
+    checkIn,
+    checkOut,
+    guests: totalGuests,
+  };
+
+  // Save to sessionStorage so it survives redirects/login/refresh
+  try { sessionStorage.setItem("rr_checkout", JSON.stringify(payload)); } catch {}
+
+  // Navigate with state too (fast path)
+  navigate("/checkout", { state: payload });
 }
+
 
 
   /* --------------------------- UI (your style) -------------------------- */
