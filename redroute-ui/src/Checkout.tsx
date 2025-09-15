@@ -1,294 +1,223 @@
-// src/EventCheckout.tsx
+// src/Checkout.tsx
+import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
-import {
-  ChevronLeft,
-  Calendar,
-  MapPin,
-  Minus,
-  Plus,
-  CheckCircle2,
-} from "lucide-react";
+import { ChevronLeft, CheckCircle2 } from "lucide-react";
 
-/* ---------- cookie + auth helpers ---------- */
-function parseCookie(name: string) {
-  const m = document.cookie.match(
-    new RegExp("(^| )" + encodeURIComponent(name) + "=([^;]+)")
-  );
-  return m ? decodeURIComponent(m[2]) : null;
-}
-
+/* ---------- auth/meta helper ---------- */
 async function getMe() {
   const r = await fetch("/api/auth/me", { credentials: "include" });
   if (!r.ok) throw new Error("Not authenticated");
   const me = await r.json().catch(() => ({}));
-  return {
-    id: me?.user?.id ?? me?.id ?? null,
-    email: me?.user?.email ?? me?.email ?? null,
-    firstName: me?.user?.firstName ?? me?.firstName ?? null,
-    lastName: me?.user?.lastName ?? me?.lastName ?? null,
-  };
+  const id = me?.user?.id ?? me?.id ?? null;
+  const email = me?.user?.email ?? me?.email ?? null;
+  const firstName = me?.user?.firstName ?? me?.firstName ?? null;
+  const lastName = me?.user?.lastName ?? me?.lastName ?? null;
+  return { id, email, firstName, lastName };
 }
 
-async function ensureAuthHeaders(): Promise<Record<string, string> | null> {
-  let uid = parseCookie("uid");
-  let email = parseCookie("email");
-  if (!uid || !email) {
-    try {
-      const me = await getMe();
-      if (me.id) uid = me.id;
-      if (me.email) email = me.email;
-    } catch {
-      // not authed
-    }
-  }
-  if (!uid) return null;
-  const h: Record<string, string> = {
-    "content-type": "application/json",
-    "x-user-id": uid,
-  };
-  if (email) h["x-user-email"] = email;
+function authHeadersFrom(me: { id?: string | null; email?: string | null }) {
+  const h: Record<string, string> = {};
+  if (me.id) h["x-user-id"] = String(me.id);
+  if (me.email) h["x-user-email"] = String(me.email);
   return h;
 }
 
-/* ---------- types ---------- */
-type EventData = {
-  id: number;
-  name: string;
-  description: string;
-  location: string;
-  startsAt: string; // ISO
-  price: number;
-  imageUrl: string;
-  imageAlt?: string | null;
+/* ---------- date helpers (UTC to avoid DST issues) ---------- */
+function parseYMD(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
+}
+const MS_PER_NIGHT = 24 * 60 * 60 * 1000;
+
+type CheckoutState = {
+  hotelId: number;
+  name?: string;
+  city?: string;
+  image?: string;
+  price?: number;     // nightly
+  checkIn: string;    // YYYY-MM-DD
+  checkOut: string;   // YYYY-MM-DD
+  guests: number;
 };
 
-type EventBooking = {
+type Hotel = { id: number; name: string; city: string; price: number; images?: { url: string }[] };
+
+type CreatedBooking = {
   id: number;
-  eventId: number;
   userId: string;
-  qty: number;
-  totalCost: number;
+  hotelId: number;
+  checkIn: string;
+  checkOut: string;
+  guests: number;
   contactName?: string | null;
   contactEmail?: string | null;
+  totalCost: number;
   createdAt: string;
 };
 
-type CheckoutState = {
-  eventId: number;
-  qty?: number;
-};
-
-/* ---------- component ---------- */
-export default function EventCheckout() {
+export default function Checkout() {
   const navigate = useNavigate();
-  const params = useParams<{ id?: string }>();
   const { state } = useLocation() as { state?: CheckoutState };
 
-  // 1) router state
+  // 1) pull from router state
   let initial: Partial<CheckoutState> = state ?? {};
 
-  // 2) session storage (fallback)
-  if (!initial.eventId) {
+  // 2) else from sessionStorage
+  if (!initial?.hotelId) {
     try {
-      const saved = JSON.parse(
-        sessionStorage.getItem("rr_event_checkout") || "null"
-      );
+      const saved = JSON.parse(sessionStorage.getItem("rr_checkout") || "null");
       if (saved && typeof saved === "object") initial = { ...saved, ...initial };
     } catch {}
   }
 
-  // 3) URL (fallback)
-  if (!initial.eventId && params.id) initial.eventId = Number(params.id);
-  const qs = new URLSearchParams(location.search);
-  if (!initial.eventId && qs.get("eventId"))
-    initial.eventId = Number(qs.get("eventId"));
-  if (!initial.qty && qs.get("qty")) initial.qty = Number(qs.get("qty"));
+  // 3) minimal query fallback
+  const params = new URLSearchParams(location.search);
+  if (!initial.hotelId && params.get("hotelId")) {
+    initial.hotelId = Number(params.get("hotelId"));
+  }
+  initial.checkIn  = initial.checkIn  ?? params.get("checkIn")  ?? "";
+  initial.checkOut = initial.checkOut ?? params.get("checkOut") ?? "";
+  if (!initial.guests && params.get("guests")) initial.guests = Number(params.get("guests"));
 
-  const [eventId] = useState<number>(Number(initial.eventId || 0));
-  const [qty, setQty] = useState<number>(Number(initial.qty || 1));
+  const [hotelId]   = useState<number>(Number(initial.hotelId || 0));
+  const [checkIn]   = useState<string>(String(initial.checkIn || ""));
+  const [checkOut]  = useState<string>(String(initial.checkOut || ""));
+  const [guests]    = useState<number>(Number(initial.guests || 1));
+  const [name,  setName]  = useState<string>(initial.name || "");
+  const [city,  setCity]  = useState<string>(initial.city || "");
+  const [image, setImage] = useState<string>(initial.image || "/images/featured_hotel.avif");
+  const [price, setPrice] = useState<number | undefined>(initial.price);
 
-  // store minimal context to survive refresh
+  // contact derived from /api/auth/me
+  const [contactName, setContactName] = useState<string>("");
+  const [contactEmail, setContactEmail] = useState<string>("");
+
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // NEW: stay-on-page confirmation state + saved booking
+  const [confirmed, setConfirmed] = useState(false);
+  const [booking, setBooking] = useState<CreatedBooking | null>(null);
+
+  // Fetch hotel if price/name missing
   useEffect(() => {
-    sessionStorage.setItem(
-      "rr_event_checkout",
-      JSON.stringify({ eventId, qty })
-    );
-  }, [eventId, qty]);
-
-  // event details
-  const [ev, setEv] = useState<EventData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
     (async () => {
-      if (!eventId) return;
-      setLoading(true);
-      setErr(null);
+      if (!hotelId) return;
+      if (name && price != null) return;
       try {
-        const r = await fetch(`/api/events/${eventId}`, {
-          credentials: "include",
-        });
-        if (!r.ok) {
-          const j = await r.json().catch(() => null);
-          throw new Error(j?.error ?? `HTTP ${r.status}`);
-        }
-        const j = (await r.json().catch(() => null)) ?? (await r.clone().json());
-        if (alive) setEv(j as EventData);
-      } catch (e: any) {
-        if (alive) setErr(e?.message || "Failed to load event");
-      } finally {
-        if (alive) setLoading(false);
-      }
+        const r = await fetch(`/api/hotels/${hotelId}`, { credentials: "include" });
+        if (!r.ok) throw new Error();
+        const h: Hotel = await r.json();
+        setName(h.name);
+        setCity(h.city);
+        setPrice(h.price);
+        if (h.images?.[0]?.url) setImage(h.images[0].url);
+      } catch {}
     })();
-    return () => {
-      alive = false;
-    };
-  }, [eventId]);
+  }, [hotelId, name, price]);
 
-  // contact from me
-  const [contactName, setContactName] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
+  // Fetch me to prefill contact and to get headers for /api/bookings
+  const [me, setMe] = useState<{ id?: string | null; email?: string | null } | null>(null);
   useEffect(() => {
     (async () => {
       try {
-        const me = await getMe();
-        const full = [me.firstName, me.lastName].filter(Boolean).join(" ").trim();
-        setContactName(full || (me.email ? me.email.split("@")[0] : ""));
-        setContactEmail(me.email || "");
+        const m = await getMe();
+        setMe({ id: m.id, email: m.email });
+        const full = [m.firstName, m.lastName].filter(Boolean).join(" ").trim();
+        setContactName(full || (m.email ? m.email.split("@")[0] : ""));
+        setContactEmail(m.email || "");
       } catch {
-        // ignore, UI will still allow entering contact details
+        // if not authed, RequireAuth will likely have redirected already
       }
     })();
   }, []);
 
-  // derived
-  const when = useMemo(() => {
-    if (!ev?.startsAt) return "";
-    try {
-      const d = new Date(ev.startsAt);
-      return d.toLocaleString(undefined, {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return ev.startsAt;
-    }
-  }, [ev?.startsAt]);
+  // compute nights safely (min 1)
+  const nights = useMemo(() => {
+    if (!checkIn || !checkOut) return 0;
+    const n = Math.round((+parseYMD(checkOut) - +parseYMD(checkIn)) / MS_PER_NIGHT);
+    return Math.max(0, n);
+  }, [checkIn, checkOut]);
 
   const subtotal = useMemo(() => {
-    if (!ev) return 0;
-    return (ev.price || 0) * (qty || 0);
-  }, [ev, qty]);
+    if (price == null || nights <= 0) return 0;
+    return price * nights;
+  }, [price, nights]);
 
-  const valid = Boolean(eventId && ev && qty > 0);
+  const valid = hotelId && checkIn && checkOut && nights > 0 && price != null;
 
-  // booking submission + success state
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(
-    null
-  );
-  const [confirmed, setConfirmed] = useState(false);
-  const [booking, setBooking] = useState<EventBooking | null>(null);
-
-  async function payAndConfirm() {
+  async function payAndBook() {
     try {
-      setMessage(null);
-      if (!valid) throw new Error("Missing or invalid details.");
+      setMsg(null);
+      if (!valid) throw new Error("Missing or invalid booking details.");
+      if (!me) throw new Error("Not authenticated.");
 
       setBusy(true);
-      const headers = await ensureAuthHeaders();
-      if (!headers) throw new Error("Please sign in to continue.");
 
-      const resp = await fetch("/api/event-bookings", {
+      // (Stripe would go here, we proceed to booking for now)
+      const r = await fetch("/api/bookings", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeadersFrom(me),
+        },
         credentials: "include",
-        headers,
         body: JSON.stringify({
-          eventId,
-          qty,
-          // contactName / contactEmail are inferred server-side from user too,
-          // but we'll still send them if you want to persist snapshots:
+          hotelId,
+          checkIn,
+          checkOut,
+          guests,
           contactName: contactName || null,
           contactEmail: contactEmail || null,
         }),
       });
 
-      const text = await resp.text();
-      let data: any = {};
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch {
-        throw new Error(`Unexpected response: ${text.slice(0, 140)}…`);
-      }
+      const raw = await r.text();
+      const payload = raw ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : null;
 
-      if (!resp.ok) throw new Error(data?.error ?? `HTTP ${resp.status}`);
+      if (!r.ok) throw new Error(payload?.error || `Payment/booking failed (HTTP ${r.status})`);
 
-      setBooking(data?.booking ?? null);
+      // NEW: keep user here, show confirmation panel
+      setBooking(payload?.booking ?? null);
       setConfirmed(true);
-      setMessage({ ok: true, text: "Tickets confirmed! See details below." });
+      setMsg({ ok: true, text: "Payment successful! Your booking is confirmed." });
+      // no redirect
     } catch (e: any) {
-      setMessage({ ok: false, text: e?.message || "Payment failed." });
+      setMsg({ ok: false, text: e?.message || "Payment failed." });
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-black text-white grid place-items-center">
-        Loading…
-      </div>
-    );
-  }
-
-  if (err && !ev) {
-    return (
-      <div className="min-h-screen bg-black text-red-400 grid place-items-center px-4">
-        {err}
-      </div>
-    );
-  }
-
-  if (!ev) return null;
-
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="mx-auto max-w-5xl p-6">
+      <div className="mx-auto max-w-4xl p-6">
         <button
           onClick={() => navigate(-1)}
           className="mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
+          disabled={busy}
         >
           <ChevronLeft className="h-4 w-4" /> Back
         </button>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {/* Summary / left panel */}
+          {/* Summary */}
           <div className="md:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-5">
             <div className="flex items-start gap-4">
               <img
-                src={ev.imageUrl}
-                alt={ev.imageAlt ?? ev.name}
+                src={image}
+                alt={name}
                 className="h-28 w-36 rounded-xl object-cover"
-                onError={(e) =>
-                  ((e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg")
-                }
+                onError={(e) => ((e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg")}
               />
               <div className="flex-1">
-                <div className="text-xl font-semibold">{ev.name}</div>
-                <div className="text-white/70">{ev.location}</div>
+                <div className="text-xl font-semibold">{name || "Hotel"}</div>
+                <div className="text-white/70">{city}</div>
                 <div className="mt-2 text-sm text-white/80">
-                  <Calendar className="inline-block mr-1 h-4 w-4" />
-                  {when}
+                  {checkIn} → {checkOut} • {guests} {guests === 1 ? "guest" : "guests"}
                 </div>
                 <div className="mt-1 text-sm text-white/80">
-                  <MapPin className="inline-block mr-1 h-4 w-4" />
-                  {ev.location}
+                  {nights > 0 ? `${nights} night${nights > 1 ? "s" : ""}` : "Invalid dates"}
                 </div>
               </div>
             </div>
@@ -296,82 +225,62 @@ export default function EventCheckout() {
             <div className="mt-5 rounded-xl border border-white/10 bg-black/30 p-4">
               <div className="flex items-center justify-between text-sm">
                 <span>
-                  ${ev.price} × {qty} ticket{qty !== 1 ? "s" : ""}
+                  {price != null
+                    ? `$${price} × ${nights} night${nights !== 1 ? "s" : ""}`
+                    : "Price"}
                 </span>
                 <span className="font-semibold">${subtotal.toLocaleString()}</span>
               </div>
-
-              {/* qty controls (mirrors hotel UI vibe) */}
-              <div className="mt-3 flex items-center justify-between text-sm">
-                <span className="text-white/80">Tickets</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    aria-label="decrement"
-                    onClick={() => setQty((q) => Math.max(1, q - 1))}
-                    className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white/10 hover:bg-white/20"
-                  >
-                    <Minus className="h-4 w-4" />
-                  </button>
-                  <div className="w-6 text-center">{qty}</div>
-                  <button
-                    aria-label="increment"
-                    onClick={() => setQty((q) => Math.min(10, q + 1))}
-                    className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white/10 hover:bg-white/20"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-
               <div className="mt-3 border-t border-white/10 pt-3 flex items-center justify-between">
                 <span className="text-base font-semibold">Total</span>
-                <span className="text-lg font-bold">
-                  ${subtotal.toLocaleString()}
-                </span>
+                <span className="text-lg font-bold">${subtotal.toLocaleString()}</span>
               </div>
             </div>
 
-            {/* live messages */}
-            {message && (
-              <div
-                className={`mt-4 text-sm ${
-                  message.ok ? "text-green-400" : "text-red-400"
-                }`}
-              >
-                {message.text}
+            {msg && (
+              <div className={`mt-4 text-sm ${msg.ok ? "text-green-400" : "text-red-400"}`}>
+                {msg.text}
               </div>
             )}
 
-            {/* success ribbon */}
+            {/* NEW: Confirmation panel that appears after success; we DO NOT redirect */}
             {confirmed && (
               <div className="mt-5 rounded-2xl border border-green-600/30 bg-green-600/15 p-4">
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" />
                   <div>
                     <div className="text-lg font-semibold text-green-400">
-                      Tickets confirmed!
+                      Booking confirmed!
                     </div>
                     <div className="text-white/85">
-                      You’re all set for <strong>{ev.name}</strong> on{" "}
-                      <strong>{when}</strong>.
-                      {booking?.contactEmail ? (
-                        <> Confirmation sent to <strong>{booking.contactEmail}</strong>.</>
-                      ) : null}
+                      You’re all set for <strong>{name}</strong>. We’ve saved your booking
+                      details {booking?.contactEmail ? <>and sent a confirmation to <strong>{booking.contactEmail}</strong></> : null}.
                     </div>
-                    {booking && (
-                      <div className="mt-2 text-sm text-white/70">
-                        Ref: <span className="font-mono">{booking.id}</span> • Qty:{" "}
-                        <strong>{booking.qty}</strong> • Paid:{" "}
-                        <strong>${booking.totalCost}</strong>
+                    <div className="mt-3 grid gap-2 rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/70">Reference</span>
+                        <span className="font-mono">{booking?.id ?? "—"}</span>
                       </div>
-                    )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/70">Dates</span>
+                        <span>{checkIn} → {checkOut}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/70">Guests</span>
+                        <span>{booking?.guests ?? guests}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/70">Total paid</span>
+                        <span>${(booking?.totalCost ?? subtotal).toLocaleString()}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Pay box / right panel */}
+          {/* Pay box */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5 h-fit">
             {!confirmed ? (
               <>
@@ -390,13 +299,11 @@ export default function EventCheckout() {
                 />
 
                 <div className="text-sm text-white/80 mb-2">Amount due</div>
-                <div className="text-3xl font-bold mb-5">
-                  ${subtotal.toLocaleString()}
-                </div>
+                <div className="text-3xl font-bold mb-5">${subtotal.toLocaleString()}</div>
 
                 <button
                   disabled={!valid || busy}
-                  onClick={payAndConfirm}
+                  onClick={payAndBook}
                   className="h-11 w-full rounded-xl font-semibold hover:brightness-110 disabled:opacity-60"
                   style={{ background: "#E50914" }}
                 >
@@ -405,7 +312,7 @@ export default function EventCheckout() {
 
                 {!valid && (
                   <div className="mt-3 text-xs text-red-400">
-                    Missing/invalid details.
+                    Missing/invalid details. Go back and pick dates again.
                   </div>
                 )}
 
@@ -416,36 +323,9 @@ export default function EventCheckout() {
             ) : (
               <div className="text-center">
                 <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                <div className="text-xl font-bold">Tickets confirmed</div>
+                <div className="text-xl font-bold">Payment complete</div>
                 <div className="mt-1 text-white/80">
-                  Enjoy the show! Your purchase details are saved below.
-                </div>
-
-                <div className="mt-4 rounded-xl border border-white/10 p-4 text-left">
-                  <div className="flex items-center justify-between">
-                    <span className="text-white/70">Event</span>
-                    <span className="font-medium">{ev.name}</span>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-white/70">When</span>
-                    <span className="font-medium">{when}</span>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-white/70">Tickets</span>
-                    <span className="font-medium">{booking?.qty ?? qty}</span>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-white/70">Total paid</span>
-                    <span className="font-medium">
-                      ${booking?.totalCost ?? subtotal}
-                    </span>
-                  </div>
-                  {booking?.id && (
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-white/70">Reference</span>
-                      <span className="font-mono">{booking.id}</span>
-                    </div>
-                  )}
+                  Your booking details are shown on the left and saved to your account.
                 </div>
               </div>
             )}
