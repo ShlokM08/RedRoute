@@ -55,8 +55,10 @@ function fmtWhen(iso?: string) {
 }
 
 /* ------------ confetti hook (no overlay canvas, all sides) ------------ */
+/* ------------ confetti hook (50% intensity, evenly spread) ------------ */
 function useCelebration() {
   const rafRef = useRef<number | null>(null);
+  const flipRef = useRef(0);
 
   function stop() {
     if (rafRef.current != null) {
@@ -64,6 +66,8 @@ function useCelebration() {
       rafRef.current = null;
     }
   }
+
+  // durationMs is unchanged; intensity is effectively ~0.5 via fewer shots + fewer particles
   function start(durationMs = 2800) {
     stop();
     const base = { startVelocity: 45, ticks: 200, zIndex: 9999 };
@@ -73,26 +77,38 @@ function useCelebration() {
       const left = end - Date.now();
       if (left <= 0) return stop();
 
-      const particleCount = Math.max(10, Math.floor(70 * (left / durationMs)));
+      const progress = left / durationMs;
+      // ~half the particle count
+      const particleCount = Math.max(6, Math.floor(35 * progress));
+
+      // alternate frames to evenly split corners + sweeps
+      const flip = (flipRef.current ^= 1);
       const rand = (a: number, b: number) => Math.random() * (b - a) + a;
 
-      // 4 corners
-      confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.05 } });
-      confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.05 } });
-      confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.95 } });
-      confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.95 } });
-      // top & bottom sweeps
-      confetti({ ...base, particleCount: 24, spread: 120, origin: { x: rand(0.2, 0.8), y: 0 } });
-      confetti({ ...base, particleCount: 24, spread: 120, origin: { x: rand(0.2, 0.8), y: 1 } });
+      if (flip) {
+        // left-top + right-bottom
+        confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.05 } });
+        confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.95 } });
+        // top sweep
+        confetti({ ...base, particleCount: Math.ceil(particleCount * 0.8), spread: 110, origin: { x: rand(0.2, 0.8), y: 0 } });
+      } else {
+        // right-top + left-bottom
+        confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.05 } });
+        confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.95 } });
+        // bottom sweep
+        confetti({ ...base, particleCount: Math.ceil(particleCount * 0.8), spread: 110, origin: { x: rand(0.2, 0.8), y: 1 } });
+      }
 
       rafRef.current = requestAnimationFrame(run);
     };
+
     rafRef.current = requestAnimationFrame(run);
   }
 
   useEffect(() => stop, []);
   return { start, stop };
 }
+
 
 /* ------------ page ------------ */
 export default function EventDetail() {
