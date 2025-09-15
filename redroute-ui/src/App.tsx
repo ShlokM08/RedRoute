@@ -12,9 +12,9 @@ import SignIn from "./SignIn";
 import RedRouteLandingUltra from "./RedRouteLandingUltra";
 import SquareImage from "./components/SquareImage";
 import HotelDetail from "./HotelDetail";
-import Checkout from "./Checkout";               // hotel checkout
-import EventDetail from "./EventDetail";         // event detail (public)
-import EventCheckout from "./EventCheckout";     // NEW: event checkout (authed)
+import Checkout from "./Checkout";              // Hotels checkout
+import EventDetail from "./EventDetail";        // Public event details
+import EventCheckout from "./EventCheckout";    // NEW: Events checkout
 import { hasValidSession, clearSession } from "./session";
 
 function RequireAuth() {
@@ -34,7 +34,7 @@ function Logout() {
 export default function App() {
   useEffect(() => {
     if (import.meta.env.DEV) {
-      // Uncomment to clear session during dev:
+      // Uncomment if you want to clear session during dev:
       // localStorage.removeItem("rr_session_ts");
     }
   }, []);
@@ -44,13 +44,13 @@ export default function App() {
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<SignIn />} />
+        {/* Allow details pages without auth */}
         <Route path="/hotels/:id" element={<HotelDetail />} />
         <Route path="/events/:id" element={<EventDetail />} />
 
         {/* Auth-gated routes */}
         <Route element={<RequireAuth />}>
           <Route path="/home" element={<RedRouteLandingUltra />} />
-
           <Route
             path="/square"
             element={
@@ -69,12 +69,9 @@ export default function App() {
               </div>
             }
           />
-
-          {/* Hotel checkout (existing) */}
-          <Route path="/checkout" element={<Checkout />} />
-
-          {/* NEW: Event checkout (requires auth) */}
-          <Route path="/events/:id/checkout" element={<EventCheckout />} />
+          {/* Checkout routes (require auth) */}
+          <Route path="/checkout" element={<Checkout />} />                {/* Hotels */}
+          <Route path="/events/checkout" element={<EventCheckout />} />    {/* NEW: Events */}
         </Route>
 
         {/* Misc */}
