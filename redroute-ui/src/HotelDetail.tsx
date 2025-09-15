@@ -5,16 +5,16 @@ import { ChevronLeft, ChevronRight, Star, MapPin, Minus, Plus } from "lucide-rea
 import { motion, AnimatePresence } from "framer-motion";
 
 /* -------------------- auth helper (keeps real user) -------------------- */
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const r = await fetch("/api/auth/me", { credentials: "include" });
-  if (!r.ok) throw new Error("Not authenticated");
-  const me = await r.json().catch(() => ({}));
-  const id = me?.user?.id ?? me?.id ?? null;
-  const email = me?.user?.email ?? me?.email ?? null;
-  if (id) return { "x-user-id": String(id) };
-  if (email) return { "x-user-email": String(email) };
-  throw new Error("Not authenticated");
-}
+// async function getAuthHeaders(): Promise<Record<string, string>> {
+//   const r = await fetch("/api/auth/me", { credentials: "include" });
+//   if (!r.ok) throw new Error("Not authenticated");
+//   const me = await r.json().catch(() => ({}));
+//   const id = me?.user?.id ?? me?.id ?? null;
+//   const email = me?.user?.email ?? me?.email ?? null;
+//   if (id) return { "x-user-id": String(id) };
+//   if (email) return { "x-user-email": String(email) };
+//   throw new Error("Not authenticated");
+// }
 
 /* ------------------------- types & helpers ------------------------- */
 type HotelImage = { url: string; alt?: string | null };
