@@ -2,19 +2,16 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import prisma from "../_lib/prisma.js";
 
-function bad(res: VercelResponse, code: number, msg: string) {
-  return res
-    .status(code)
-    .setHeader("content-type", "application/json; charset=utf-8")
-    .json({ error: msg });
-}
-
 type Body = {
   eventId?: number | string;
   qty?: number;
-  contactName?: string | null;
-  contactEmail?: string | null;
+  contactName?: string | null;   // optional; derived from user if absent
+  contactEmail?: string | null;  // optional; derived from user if absent
 };
+
+function bad(res: VercelResponse, code: number, msg: string) {
+  return res.status(code).json({ error: msg });
+}
 
 function fallbackNameFromEmail(email?: string | null) {
   if (!email) return null;
@@ -24,38 +21,36 @@ function fallbackNameFromEmail(email?: string | null) {
     .replace(/[._-]+/g, " ")
     .split(" ")
     .filter(Boolean)
-    .map((w) => (w[0] ? w[0].toUpperCase() + w.slice(1) : ""))
+    .map(w => w[0]?.toUpperCase() + w.slice(1))
     .join(" ");
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") return bad(res, 405, "Use POST");
+
+  let body: Body;
   try {
-    if (req.method !== "POST") return bad(res, 405, "Use POST");
+    body = (typeof req.body === "string" ? JSON.parse(req.body) : req.body) ?? {};
+  } catch {
+    return bad(res, 400, "Invalid JSON body");
+  }
 
-    let body: Body;
-    try {
-      body =
-        (typeof req.body === "string" ? JSON.parse(req.body) : req.body) ?? {};
-    } catch {
-      return bad(res, 400, "Invalid JSON body");
-    }
+  const eventIdNum = Number(body.eventId);
+  const qty = Number(body.qty ?? 1);
 
-    const eventIdNum = Number(body.eventId);
-    if (!eventIdNum || Number.isNaN(eventIdNum))
-      return bad(res, 400, "eventId must be a number");
+  if (!Number.isFinite(eventIdNum) || eventIdNum <= 0) {
+    return bad(res, 400, "eventId must be a positive number");
+  }
+  if (!Number.isFinite(qty) || qty <= 0) {
+    return bad(res, 400, "qty must be a positive number");
+  }
 
-    const qty = Math.max(1, Math.floor(Number(body.qty ?? 1)));
-    if (!qty || Number.isNaN(qty)) return bad(res, 400, "qty must be >= 1");
-
-    // Identify user (exactly like your hotel booking handler)
+  try {
+    // identify user (same convention as hotel bookings)
     const headerUserId =
-      typeof req.headers["x-user-id"] === "string"
-        ? req.headers["x-user-id"].trim()
-        : null;
+      typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"].trim() : null;
     const headerEmail =
-      typeof req.headers["x-user-email"] === "string"
-        ? req.headers["x-user-email"].trim()
-        : null;
+      typeof req.headers["x-user-email"] === "string" ? req.headers["x-user-email"].trim() : null;
 
     let userId: string | null = null;
     let userEmail: string | null = headerEmail ?? null;
@@ -76,43 +71,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (!userId) return bad(res, 401, "Not authenticated");
 
-    // Load event
+    // load event
     const ev = await prisma.event.findUnique({
       where: { id: eventIdNum },
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        capacity: true,
-      },
+      select: { id: true, name: true, price: true, capacity: true, startsAt: true },
     });
     if (!ev) return bad(res, 404, "Event not found");
 
-    // Capacity check: sum already booked seats
+    // capacity check: sum of qty already reserved for this event
     const agg = await prisma.eventBooking.aggregate({
-      where: { eventId: ev.id },
+      where: { eventId: eventIdNum },
       _sum: { qty: true },
     });
     const already = agg._sum.qty ?? 0;
-    const remaining = Math.max(0, (ev.capacity ?? 0) - already);
-    if (ev.capacity != null && qty > remaining) {
-      return bad(
-        res,
-        409,
-        `Only ${remaining} seat(s) remaining for this event`
-      );
+    const remaining = Math.max(0, ev.capacity - already);
+    if (qty > remaining) {
+      return bad(res, 409, `Only ${remaining} seats remaining for this event`);
     }
 
-    // Derive contact fields if not sent
-    const guessedName =
-      userFirst || userLast
+    // derive contact fields if caller didn't send
+    const defaultName =
+      (userFirst || userLast)
         ? [userFirst, userLast].filter(Boolean).join(" ").trim()
         : fallbackNameFromEmail(userEmail);
-    const contactName = body.contactName ?? guessedName ?? null;
-    const contactEmail = body.contactEmail ?? userEmail ?? null;
+    const finalContactName = body.contactName ?? defaultName ?? null;
+    const finalContactEmail = body.contactEmail ?? userEmail ?? null;
 
-    // Compute total (server-side truth)
-    const totalCost = (ev.price || 0) * qty;
+    // compute total
+    const totalCost = ev.price * qty;
 
     const booking = await prisma.eventBooking.create({
       data: {
@@ -120,13 +106,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         eventId: ev.id,
         qty,
         totalCost,
-        contactName,
-        contactEmail,
+        contactName: finalContactName,
+        contactEmail: finalContactEmail,
       },
       select: {
         id: true,
-        userId: true,
         eventId: true,
+        userId: true,
         qty: true,
         totalCost: true,
         contactName: true,
@@ -135,13 +121,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
 
-    return res
-      .status(201)
-      .setHeader("content-type", "application/json; charset=utf-8")
-      .json({ ok: true, booking });
-  } catch (err: any) {
-    console.error("POST /api/event-bookings error:", err);
-    const code = err?.code ? ` (code ${err.code})` : "";
-    return bad(res, 500, `Server error${code}`);
+    return res.status(201).json({ ok: true, booking });
+  } catch (e: any) {
+    console.error("POST /api/event-bookings error:", e);
+    return bad(res, 500, e?.message || "Server error");
   }
 }

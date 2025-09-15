@@ -9,6 +9,7 @@
   },
   "rewrites": [
     { "source": "/api/hotels/:id", "destination": "/api/hotels/[id]" },
+    { "source": "/api/events/:id",  "destination": "/api/events/[id]" },
     { "source": "/api/(.*)",       "destination": "/api/$1" },
     { "source": "/(.*)",           "destination": "/index.html" }
   ]
