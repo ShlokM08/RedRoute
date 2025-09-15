@@ -55,6 +55,106 @@ type CreatedBooking = {
   createdAt: string;
 };
 
+/* ----------------------- Confetti Overlay -----------------------
+   Lightweight CSS confetti — bursts from top/bottom/left/right.
+   Mount for ~1.4s, then unmount. No external libs required.
+------------------------------------------------------------------*/
+function FourSideConfetti({ show, onDone, duration = 1400 }: {
+  show: boolean;
+  onDone?: () => void;
+  duration?: number;
+}) {
+  const [seed, setSeed] = useState(0);
+
+  useEffect(() => {
+    if (!show) return;
+    setSeed(Date.now());
+    const t = setTimeout(() => onDone?.(), duration);
+    return () => clearTimeout(t);
+  }, [show, duration, onDone]);
+
+  if (!show) return null;
+
+  const colors = ["#E50914", "#ffffff", "#ffd166", "#06d6a0", "#118ab2", "#ef476f"];
+  const piecesPerSide = 28;
+  const makePieces = (side: "top" | "bottom" | "left" | "right") => {
+    const arr = Array.from({ length: piecesPerSide });
+    return arr.map((_, i) => {
+      // random helpers (seed only to vary on re-mount)
+      const rand = (min: number, max: number) => {
+        const x = Math.sin(seed + i * 999 + (side === "top" ? 1 : side === "right" ? 2 : side === "bottom" ? 3 : 4)) * 0.5 + 0.5;
+        return min + (max - min) * (Math.random() * 0.7 + 0.3) * x;
+      };
+
+      // Start positions & end offsets by side
+      let x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+      if (side === "top") {
+        x0 = rand(5, 95); y0 = -6;
+        x1 = x0 + rand(-20, 20); y1 = 110;
+      } else if (side === "bottom") {
+        x0 = rand(5, 95); y0 = 106;
+        x1 = x0 + rand(-20, 20); y1 = -10;
+      } else if (side === "left") {
+        x0 = -6; y0 = rand(10, 90);
+        x1 = 108; y1 = y0 + rand(-18, 18);
+      } else {
+        x0 = 106; y0 = rand(10, 90);
+        x1 = -10; y1 = y0 + rand(-18, 18);
+      }
+
+      const size = rand(6, 10);
+      const rot0 = rand(0, 180);
+      const rot1 = rot0 + rand(360, 1080);
+      const delay = rand(0, 180); // ms
+      const color = colors[i % colors.length];
+
+      const style = {
+        // percent-based positions fed into keyframes via CSS variables
+        // we use viewport units by putting values as percentages of viewport
+        // and let the keyframes translate them.
+        // @ts-ignore – CSS custom props
+        "--x0": `${x0}vw`,
+        "--y0": `${y0}vh`,
+        "--x1": `${x1}vw`,
+        "--y1": `${y1}vh`,
+        "--r0": `${rot0}deg`,
+        "--r1": `${rot1}deg`,
+        "--dur": `${duration}ms`,
+        "--delay": `${delay}ms`,
+        background: color,
+        width: `${size}px`,
+        height: `${size * 0.6}px`,
+      } as React.CSSProperties;
+
+      return <div key={`${side}-${i}`} className="rr-confetti-piece" style={style} />;
+    });
+  };
+
+  return (
+    <>
+      <div className="rr-confetti fixed inset-0 pointer-events-none z-[9999]">
+        {["top","right","bottom","left"].map((s) => makePieces(s as any))}
+      </div>
+      <style>{`
+        .rr-confetti-piece {
+          position: fixed;
+          top: 0; left: 0;
+          transform: translate(var(--x0), var(--y0)) rotate(var(--r0));
+          opacity: 0.95;
+          border-radius: 2px;
+          animation: rr-fly var(--dur) ease-out forwards;
+          animation-delay: var(--delay);
+          box-shadow: 0 0 0.5px rgba(0,0,0,.15);
+        }
+        @keyframes rr-fly {
+          0%   { transform: translate(var(--x0), var(--y0)) rotate(var(--r0)); opacity: 1; }
+          100% { transform: translate(var(--x1), var(--y1)) rotate(var(--r1)); opacity: 0; }
+        }
+      `}</style>
+    </>
+  );
+}
+
 export default function Checkout() {
   const navigate = useNavigate();
   const { state } = useLocation() as { state?: CheckoutState };
@@ -95,7 +195,8 @@ export default function Checkout() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // NEW: stay-on-page confirmation state + saved booking
+  // NEW: celebration + confirmation states
+  const [celebrating, setCelebrating] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [booking, setBooking] = useState<CreatedBooking | null>(null);
 
@@ -177,11 +278,15 @@ export default function Checkout() {
 
       if (!r.ok) throw new Error(payload?.error || `Payment/booking failed (HTTP ${r.status})`);
 
-      // NEW: keep user here, show confirmation panel
+      // NEW: Play confetti first, then show confirmation panel/message
       setBooking(payload?.booking ?? null);
-      setConfirmed(true);
-      setMsg({ ok: true, text: "Payment successful! Your booking is confirmed." });
-      // no redirect
+      setCelebrating(true);
+      // Wait for confetti to finish before revealing the panel & message
+      setTimeout(() => {
+        setCelebrating(false);
+        setConfirmed(true);
+        setMsg({ ok: true, text: "Payment successful! Your booking is confirmed." });
+      }, 1400);
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
     } finally {
@@ -191,10 +296,13 @@ export default function Checkout() {
 
   return (
     <div className="min-h-screen bg-black text-white">
+      {/* Confetti overlay (mounts only when celebrating) */}
+      <FourSideConfetti show={celebrating} />
+
       <div className="mx-auto max-w-4xl p-6">
         <button
           onClick={() => navigate(-1)}
-          className="mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
+          className="mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20 disabled:opacity-60"
           disabled={busy}
         >
           <ChevronLeft className="h-4 w-4" /> Back
@@ -243,7 +351,7 @@ export default function Checkout() {
               </div>
             )}
 
-            {/* NEW: Confirmation panel that appears after success; we DO NOT redirect */}
+            {/* Confirmation panel — appears only after confetti completes */}
             {confirmed && (
               <div className="mt-5 rounded-2xl border border-green-600/30 bg-green-600/15 p-4">
                 <div className="flex items-start gap-3">
