@@ -1,21 +1,22 @@
 // api/events/[id].ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import prisma from "../_lib/prisma.js"; // keep .js for Vercel
+import prisma from "../_lib/prisma.js";
+
+function bad(res: VercelResponse, code: number, msg: string) {
+  return res
+    .status(code)
+    .setHeader("content-type", "application/json; charset=utf-8")
+    .json({ error: msg });
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "GET") {
-    res.setHeader("Cache-Control", "no-store");
-    return res.status(405).json({ error: "Use GET" });
-  }
-
-  const raw = (req.query as any)?.id;
-  const id = Number(Array.isArray(raw) ? raw[0] : raw);
-  if (!Number.isFinite(id) || id <= 0) {
-    res.setHeader("Cache-Control", "no-store");
-    return res.status(400).json({ error: "Invalid id" });
-  }
-
   try {
+    if (req.method !== "GET") return bad(res, 405, "Use GET");
+
+    const idRaw = (req.query.id ?? "").toString();
+    const id = Number(idRaw);
+    if (!id || Number.isNaN(id)) return bad(res, 400, "Invalid id");
+
     const ev = await prisma.event.findUnique({
       where: { id },
       select: {
@@ -28,19 +29,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         capacity: true,
         imageUrl: true,
         imageAlt: true,
+        createdAt: true,
+        // If you later add images table for events, include it here.
       },
     });
 
-    if (!ev) {
-      res.setHeader("Cache-Control", "no-store");
-      return res.status(404).json({ error: "Event not found" });
-    }
+    if (!ev) return bad(res, 404, "Event not found");
 
-    res.setHeader("Cache-Control", "no-store");
-    return res.status(200).json(ev);
-  } catch (err) {
+    return res
+      .status(200)
+      .setHeader("content-type", "application/json; charset=utf-8")
+      .json(ev);
+  } catch (err: any) {
     console.error("GET /api/events/[id] error:", err);
-    res.setHeader("Cache-Control", "no-store");
-    return res.status(500).json({ error: "Server error" });
+    return bad(res, 500, "Server error");
   }
 }

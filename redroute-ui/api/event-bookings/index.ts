@@ -2,23 +2,19 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import prisma from "../_lib/prisma.js";
 
-/** Tiny cookie parser so we can fall back if headers missing */
-function cookieGet(req: VercelRequest, key: string): string | null {
-  const raw = req.headers.cookie || "";
-  const parts = raw.split(/;\s*/g);
-  for (const p of parts) {
-    const [k, ...rest] = p.split("=");
-    if (!k) continue;
-    if (decodeURIComponent(k.trim()) === key) {
-      return decodeURIComponent((rest.join("=") || "").trim());
-    }
-  }
-  return null;
+function bad(res: VercelResponse, code: number, msg: string) {
+  return res
+    .status(code)
+    .setHeader("content-type", "application/json; charset=utf-8")
+    .json({ error: msg });
 }
 
-function bad(res: VercelResponse, code: number, msg: string) {
-  return res.status(code).json({ error: msg });
-}
+type Body = {
+  eventId?: number | string;
+  qty?: number;
+  contactName?: string | null;
+  contactEmail?: string | null;
+};
 
 function fallbackNameFromEmail(email?: string | null) {
   if (!email) return null;
@@ -33,107 +29,119 @@ function fallbackNameFromEmail(email?: string | null) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") return bad(res, 405, "Use POST");
-
-  // -------- Parse JSON body safely
-  let body: any = {};
   try {
-    body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body ?? {});
-  } catch {
-    return bad(res, 400, "Invalid JSON body");
-  }
+    if (req.method !== "POST") return bad(res, 405, "Use POST");
 
-  const eventId = Number(body.eventId);
-  const qty = Math.max(1, Number(body.qty ?? 1));
+    let body: Body;
+    try {
+      body =
+        (typeof req.body === "string" ? JSON.parse(req.body) : req.body) ?? {};
+    } catch {
+      return bad(res, 400, "Invalid JSON body");
+    }
 
-  if (!Number.isFinite(eventId) || eventId <= 0) return bad(res, 400, "eventId must be a positive number");
-  if (!Number.isFinite(qty)) return bad(res, 400, "qty must be a number");
+    const eventIdNum = Number(body.eventId);
+    if (!eventIdNum || Number.isNaN(eventIdNum))
+      return bad(res, 400, "eventId must be a number");
 
-  // -------- Identify the user (headers first, cookies as fallback)
-  const headerUid = typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"].trim() : null;
-  const headerEmail = typeof req.headers["x-user-email"] === "string" ? req.headers["x-user-email"].trim() : null;
+    const qty = Math.max(1, Math.floor(Number(body.qty ?? 1)));
+    if (!qty || Number.isNaN(qty)) return bad(res, 400, "qty must be >= 1");
 
-  const cookieUid = cookieGet(req, "uid");
-  const cookieEmail = cookieGet(req, "email");
+    // Identify user (exactly like your hotel booking handler)
+    const headerUserId =
+      typeof req.headers["x-user-id"] === "string"
+        ? req.headers["x-user-id"].trim()
+        : null;
+    const headerEmail =
+      typeof req.headers["x-user-email"] === "string"
+        ? req.headers["x-user-email"].trim()
+        : null;
 
-  const userId = headerUid || cookieUid;
-  const email = headerEmail || cookieEmail;
+    let userId: string | null = null;
+    let userEmail: string | null = headerEmail ?? null;
+    let userFirst: string | null = null;
+    let userLast: string | null = null;
 
-  if (!userId) return bad(res, 401, "Not authenticated");
+    if (headerUserId) {
+      const u = await prisma.user.findUnique({
+        where: { id: headerUserId },
+        select: { id: true, email: true, firstName: true, lastName: true },
+      });
+      if (u) {
+        userId = u.id;
+        userEmail = u.email ?? userEmail;
+        userFirst = u.firstName ?? null;
+        userLast = u.lastName ?? null;
+      }
+    }
+    if (!userId) return bad(res, 401, "Not authenticated");
 
-  try {
-    // -------- Fetch event + price/capacity
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-      select: { id: true, name: true, price: true, capacity: true, startsAt: true },
+    // Load event
+    const ev = await prisma.event.findUnique({
+      where: { id: eventIdNum },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        capacity: true,
+      },
     });
-    if (!event) return bad(res, 404, "Event not found");
+    if (!ev) return bad(res, 404, "Event not found");
 
-    // -------- Capacity check (sum of existing qty)
+    // Capacity check: sum already booked seats
     const agg = await prisma.eventBooking.aggregate({
-      where: { eventId },
+      where: { eventId: ev.id },
       _sum: { qty: true },
     });
     const already = agg._sum.qty ?? 0;
-    const remaining = Math.max(0, event.capacity - already);
-    if (qty > remaining) {
-      return bad(res, 409, `Only ${remaining} seats left for this event`);
+    const remaining = Math.max(0, (ev.capacity ?? 0) - already);
+    if (ev.capacity != null && qty > remaining) {
+      return bad(
+        res,
+        409,
+        `Only ${remaining} seat(s) remaining for this event`
+      );
     }
 
-    const totalCost = event.price * qty;
+    // Derive contact fields if not sent
+    const guessedName =
+      userFirst || userLast
+        ? [userFirst, userLast].filter(Boolean).join(" ").trim()
+        : fallbackNameFromEmail(userEmail);
+    const contactName = body.contactName ?? guessedName ?? null;
+    const contactEmail = body.contactEmail ?? userEmail ?? null;
 
-    // -------- Try to load user to snapshot contact info
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true, firstName: true, lastName: true },
+    // Compute total (server-side truth)
+    const totalCost = (ev.price || 0) * qty;
+
+    const booking = await prisma.eventBooking.create({
+      data: {
+        userId,
+        eventId: ev.id,
+        qty,
+        totalCost,
+        contactName,
+        contactEmail,
+      },
+      select: {
+        id: true,
+        userId: true,
+        eventId: true,
+        qty: true,
+        totalCost: true,
+        contactName: true,
+        contactEmail: true,
+        createdAt: true,
+      },
     });
 
-    const contactEmail = user?.email ?? email ?? null;
-    const contactName =
-      [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
-      fallbackNameFromEmail(contactEmail);
-
-    // -------- Create booking in a short transaction (minimal race window)
-    const booking = await prisma.$transaction(async (tx) => {
-      // Re-check capacity right before insert (optional but safer)
-      const agg2 = await tx.eventBooking.aggregate({
-        where: { eventId },
-        _sum: { qty: true },
-      });
-      const already2 = agg2._sum.qty ?? 0;
-      const remaining2 = Math.max(0, event.capacity - already2);
-      if (qty > remaining2) {
-        throw new Error(`Only ${remaining2} seats left for this event`);
-      }
-
-      return tx.eventBooking.create({
-        data: {
-          userId,
-          eventId,
-          qty,
-          totalCost,
-          contactEmail,
-          contactName,
-        },
-        select: {
-          id: true,
-          eventId: true,
-          userId: true,
-          qty: true,
-          totalCost: true,
-          contactEmail: true,
-          contactName: true,
-          createdAt: true,
-        },
-      });
-    });
-
-    return res.status(201).json({ ok: true, booking });
+    return res
+      .status(201)
+      .setHeader("content-type", "application/json; charset=utf-8")
+      .json({ ok: true, booking });
   } catch (err: any) {
-    const msg = err?.message || "Server error";
-    // If it was our re-check error, surface as 409
-    if (/seats left/.test(msg)) return bad(res, 409, msg);
-    console.error("event-bookings error:", err);
-    return bad(res, 500, "Server error");
+    console.error("POST /api/event-bookings error:", err);
+    const code = err?.code ? ` (code ${err.code})` : "";
+    return bad(res, 500, `Server error${code}`);
   }
 }

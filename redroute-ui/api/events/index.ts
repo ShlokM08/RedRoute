@@ -2,15 +2,33 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import prisma from "../_lib/prisma.js"; // keep .js for Vercel
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "GET") {
-    res.setHeader("Cache-Control", "no-store");
-    return res.status(405).json({ error: "Use GET" });
-  }
+function bad(res: VercelResponse, code: number, msg: string) {
+  return res
+    .status(code)
+    .setHeader("content-type", "application/json; charset=utf-8")
+    .json({ error: msg });
+}
 
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
+    if (req.method !== "GET") return bad(res, 405, "Use GET");
+
+    // optional: simple search & pagination
+    const q = String(req.query.q ?? "").trim().toLowerCase();
+    const take = Math.min(50, Math.max(1, Number(req.query.take ?? 20)));
+
     const events = await prisma.event.findMany({
-      orderBy: { startsAt: "asc" },
+      where: q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { location: { contains: q, mode: "insensitive" } },
+              { description: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : undefined,
+      orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+      take,
       select: {
         id: true,
         name: true,
@@ -21,14 +39,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         capacity: true,
         imageUrl: true,
         imageAlt: true,
+        createdAt: true,
       },
     });
 
-    res.setHeader("Cache-Control", "no-store");
-    return res.status(200).json(events);
-  } catch (err) {
+    return res
+      .status(200)
+      .setHeader("content-type", "application/json; charset=utf-8")
+      .json(events);
+  } catch (err: any) {
     console.error("GET /api/events error:", err);
-    res.setHeader("Cache-Control", "no-store");
-    return res.status(500).json({ error: "Server error" });
+    return bad(res, 500, "Server error");
   }
 }
