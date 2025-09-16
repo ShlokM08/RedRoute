@@ -1,6 +1,6 @@
 // /api/events/[id].ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import  prisma from "../_lib/prisma"; // <- named import (no .js ext)
+import prisma from "../_lib/prisma";
 
 /* helpers */
 const pickUser = (u: any) =>
