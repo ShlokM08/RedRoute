@@ -1,6 +1,6 @@
-// api/events/[id].ts
+// /api/events/[id].ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import prisma from "../_lib/prisma.js";
+import  prisma from "../_lib/prisma"; // <- named import (no .js ext)
 
 /* helpers */
 const pickUser = (u: any) =>
@@ -26,6 +26,20 @@ async function getUserFromHeaders(req: VercelRequest) {
     if (u) return u;
   }
   return null;
+}
+
+async function readJsonBody(req: VercelRequest): Promise<any> {
+  if (req.body && typeof req.body === "object") return req.body;
+  if (typeof req.body === "string") {
+    try { return JSON.parse(req.body); } catch { return {}; }
+  }
+  return await new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      try { resolve(JSON.parse(raw || "{}")); } catch { resolve({}); }
+    });
+  });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -83,25 +97,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === "POST") {
-      // create/update a review at the same endpoint
       const user = await getUserFromHeaders(req);
       if (!user) return res.status(401).json({ error: "Not authenticated" });
 
-      const rating = sanitizeRating((req.body as any)?.rating);
-      const title: string | null = ((req.body as any)?.title ?? null) || null;
-      const body: string = (((req.body as any)?.body || "") as string).toString().trim();
+      const body = await readJsonBody(req);
+      const rating = sanitizeRating(body?.rating);
+      const title: string | null = (body?.title ?? null) || null;
+      const text: string = (body?.body || "").toString().trim();
 
       if (!rating) return res.status(400).json({ error: "Rating must be 1–5" });
-      if (!body) return res.status(400).json({ error: "Review text required" });
+      if (!text) return res.status(400).json({ error: "Review text required" });
 
       const review = await prisma.eventReview.upsert({
         where: { eventId_userId: { eventId, userId: user.id } },
-        update: { rating, title, body },
-        create: { eventId, userId: user.id, rating, title, body },
+        update: { rating, title, body: text },
+        create: { eventId, userId: user.id, rating, title, body: text },
         include: { user: { select: { firstName: true, lastName: true, email: true } } },
       });
 
-      const agg = await prisma.eventReview.aggregate({ where: { eventId }, _avg: { rating: true }, _count: { _all: true } });
+      const agg = await prisma.eventReview.aggregate({
+        where: { eventId },
+        _avg: { rating: true },
+        _count: { _all: true },
+      });
 
       return res.status(200).json({
         review: {

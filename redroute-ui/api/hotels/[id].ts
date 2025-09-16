@@ -1,6 +1,6 @@
-// api/hotels/[id].ts
+// /api/hotels/[id].ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import prisma from "../_lib/prisma.js";
+import  prisma  from "../_lib/prisma.js"; // <- named import (no .js ext)
 
 /* helpers */
 const pickUser = (u: any) =>
@@ -28,8 +28,22 @@ async function getUserFromHeaders(req: VercelRequest) {
   return null;
 }
 
+// parse body safely (works if Vercel already parsed or if it's a string/undefined)
+async function readJsonBody(req: VercelRequest): Promise<any> {
+  if (req.body && typeof req.body === "object") return req.body;
+  if (typeof req.body === "string") {
+    try { return JSON.parse(req.body); } catch { return {}; }
+  }
+  return await new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      try { resolve(JSON.parse(raw || "{}")); } catch { resolve({}); }
+    });
+  });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Vercel dynamic route param
   const idParam = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
   const hotelId = Number(idParam);
   if (!Number.isFinite(hotelId) || hotelId <= 0) {
@@ -82,26 +96,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === "POST") {
-      // create/update a review at the same endpoint
       const user = await getUserFromHeaders(req);
       if (!user) return res.status(401).json({ error: "Not authenticated" });
 
-      const rating = sanitizeRating((req.body as any)?.rating);
-      const title: string | null = ((req.body as any)?.title ?? null) || null;
-      const body: string = (((req.body as any)?.body || "") as string).toString().trim();
+      const body = await readJsonBody(req);
+      const rating = sanitizeRating(body?.rating);
+      const title: string | null = (body?.title ?? null) || null;
+      const text: string = (body?.body || "").toString().trim();
 
       if (!rating) return res.status(400).json({ error: "Rating must be 1–5" });
-      if (!body) return res.status(400).json({ error: "Review text required" });
+      if (!text) return res.status(400).json({ error: "Review text required" });
 
       const review = await prisma.hotelReview.upsert({
         where: { hotelId_userId: { hotelId, userId: user.id } },
-        update: { rating, title, body },
-        create: { hotelId, userId: user.id, rating, title, body },
+        update: { rating, title, body: text },
+        create: { hotelId, userId: user.id, rating, title, body: text },
         include: { user: { select: { firstName: true, lastName: true, email: true } } },
       });
 
       // recompute & persist hotel.rating for list cards
-      const agg = await prisma.hotelReview.aggregate({ where: { hotelId }, _avg: { rating: true }, _count: { _all: true } });
+      const agg = await prisma.hotelReview.aggregate({
+        where: { hotelId },
+        _avg: { rating: true },
+        _count: { _all: true },
+      });
       const avg = agg._avg.rating ?? null;
       if (avg != null) {
         await prisma.hotel.update({ where: { id: hotelId }, data: { rating: Math.round(avg * 10) / 10 } });
@@ -124,6 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(405).json({ error: "Use GET or POST" });
   } catch (e: any) {
+    console.error("GET/POST /api/hotels/[id] error:", e);
     return res.status(500).json({ error: e?.message || "Server error" });
   }
 }
