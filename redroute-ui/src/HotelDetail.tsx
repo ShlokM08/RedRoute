@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CalendarDays, Home, MapPin, Minus, Plus, Send, Star } from "lucide-react";
+import {  Home, MapPin, Minus, Plus, Send, Star } from "lucide-react";
 
 /* -------------------- auth helper (for posting reviews) -------------------- */
 async function getMe() {
