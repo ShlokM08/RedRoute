@@ -1,6 +1,6 @@
-// api/events/[id].ts
+// /api/events/[id].ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import prisma from "../_lib/prisma";
+import  prisma from "../_lib/prisma"; // <- named import (no .js ext)
 
 /* helpers */
 const pickUser = (u: any) =>
@@ -14,8 +14,8 @@ const sanitizeRating = (n: any) => {
 };
 
 async function getUserFromHeaders(req: VercelRequest) {
-  const id = ((req.headers["x-user-id"] as string) || "").trim();
-  const email = ((req.headers["x-user-email"] as string) || "").trim();
+  const id = (req.headers["x-user-id"] as string | undefined)?.trim() || "";
+  const email = (req.headers["x-user-email"] as string | undefined)?.trim() || "";
 
   if (id) {
     const u = await prisma.user.findUnique({ where: { id } });
@@ -28,30 +28,26 @@ async function getUserFromHeaders(req: VercelRequest) {
   return null;
 }
 
-function getId(req: VercelRequest) {
-  const idParam = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
-  const id = Number(idParam);
-  return Number.isFinite(id) && id > 0 ? id : null;
-}
-
-function json(res: VercelResponse, code: number, data: any) {
-  res.status(code).setHeader("content-type", "application/json; charset=utf-8");
-  return res.send(JSON.stringify(data));
+async function readJsonBody(req: VercelRequest): Promise<any> {
+  if (req.body && typeof req.body === "object") return req.body;
+  if (typeof req.body === "string") {
+    try { return JSON.parse(req.body); } catch { return {}; }
+  }
+  return await new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      try { resolve(JSON.parse(raw || "{}")); } catch { resolve({}); }
+    });
+  });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Preflight / HEAD
-  if (req.method === "OPTIONS") {
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS,HEAD");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type,x-user-id,x-user-email");
-    return res.status(204).end();
+  const idParam = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
+  const eventId = Number(idParam);
+  if (!Number.isFinite(eventId) || eventId <= 0) {
+    return res.status(400).json({ error: "Invalid id" });
   }
-  if (req.method === "HEAD") {
-    return res.status(200).end();
-  }
-
-  const eventId = getId(req);
-  if (!eventId) return json(res, 400, { error: "Invalid id" });
 
   try {
     if (req.method === "GET") {
@@ -76,19 +72,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           take: 50,
           include: { user: { select: { firstName: true, lastName: true, email: true } } },
         }),
-        prisma.eventReview.aggregate({
-          where: { eventId },
-          _avg: { rating: true },
-          _count: { _all: true },
-        }),
+        prisma.eventReview.aggregate({ where: { eventId }, _avg: { rating: true }, _count: { _all: true } }),
       ]);
 
-      if (!ev) return json(res, 404, { error: "Not found" });
+      if (!ev) return res.status(404).json({ error: "Not found" });
 
       const reviewsAvg = agg._avg.rating ? Math.round(agg._avg.rating * 10) / 10 : null;
       const reviewsCount = agg._count._all ?? 0;
 
-      return json(res, 200, {
+      return res.status(200).json({
         ...ev,
         reviews: reviews.map((r) => ({
           id: r.id,
@@ -106,19 +98,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === "POST") {
       const user = await getUserFromHeaders(req);
-      if (!user) return json(res, 401, { error: "Not authenticated" });
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
 
-      const rating = sanitizeRating((req.body as any)?.rating);
-      const title: string | null = ((req.body as any)?.title ?? null) || null;
-      const body: string = (((req.body as any)?.body || "") as string).toString().trim();
+      const body = await readJsonBody(req);
+      const rating = sanitizeRating(body?.rating);
+      const title: string | null = (body?.title ?? null) || null;
+      const text: string = (body?.body || "").toString().trim();
 
-      if (!rating) return json(res, 400, { error: "Rating must be 1–5" });
-      if (!body) return json(res, 400, { error: "Review text required" });
+      if (!rating) return res.status(400).json({ error: "Rating must be 1–5" });
+      if (!text) return res.status(400).json({ error: "Review text required" });
 
       const review = await prisma.eventReview.upsert({
         where: { eventId_userId: { eventId, userId: user.id } },
-        update: { rating, title, body },
-        create: { eventId, userId: user.id, rating, title, body },
+        update: { rating, title, body: text },
+        create: { eventId, userId: user.id, rating, title, body: text },
         include: { user: { select: { firstName: true, lastName: true, email: true } } },
       });
 
@@ -128,7 +121,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         _count: { _all: true },
       });
 
-      return json(res, 200, {
+      return res.status(200).json({
         review: {
           id: review.id,
           userId: review.userId,
@@ -143,9 +136,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    return json(res, 405, { error: "Use GET or POST" });
+    return res.status(405).json({ error: "Use GET or POST" });
   } catch (e: any) {
-    console.error("API /api/events/[id] error:", e);
-    return json(res, 500, { error: e?.message || "Server error" });
+    console.error("GET/POST /api/events/[id] error:", e);
+    return res.status(500).json({ error: e?.message || "Server error" });
   }
 }
