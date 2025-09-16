@@ -23,6 +23,18 @@ function authHeadersFrom(me: { id?: string | null; email?: string | null }) {
 }
 
 /* ------------ types ------------ */
+type ReviewUser = { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
+
+type Review = {
+  id: number;
+  userId?: string; // not required in payload we display
+  rating: number;
+  title?: string | null;
+  body: string;
+  createdAt: string;
+  user?: ReviewUser;
+};
+
 type EventItem = {
   id: number;
   name: string;
@@ -32,24 +44,19 @@ type EventItem = {
   price: number;
   imageUrl: string;
   imageAlt?: string | null;
+
+  // NEW: included by /api/events/:id
+  reviews?: Review[];
+  reviewsAvg?: number | null;
+  reviewsCount?: number;
 };
+
 type CreatedEventBooking = {
   id: number;
   eventId: number;
   qty: number;
   totalCost: number;
   contactEmail?: string | null;
-};
-
-/* Reviews */
-type Review = {
-  id: number;
-  userId: string;
-  rating: number;
-  title?: string | null;
-  body: string;
-  createdAt: string;
-  user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
 };
 
 /* ------------ utils ------------ */
@@ -193,46 +200,34 @@ export default function EventDetail() {
     })();
   }, []);
 
+  // Load event + embedded reviews (single request)
   useEffect(() => {
     (async () => {
       setLoading(true);
+      setRevLoading(true);
       try {
         const r = await fetch(`/api/events/${id}`, { credentials: "include" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const e: EventItem = await r.json();
         setEv(e);
-      } catch {
-        setEv(null);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [id]);
-
-  // Load reviews
-  useEffect(() => {
-    (async () => {
-      if (!id) return;
-      setRevLoading(true);
-      try {
-        const r = await fetch(`/api/events/${id}/reviews`, { credentials: "include" });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data: Review[] = await r.json();
-        setReviews(Array.isArray(data) ? data : []);
+        setReviews(Array.isArray(e.reviews) ? e.reviews : []);
         setRevErr(null);
       } catch (e: any) {
+        setEv(null);
         setRevErr(e?.message || "Failed to load reviews");
       } finally {
+        setLoading(false);
         setRevLoading(false);
       }
     })();
   }, [id]);
 
   const avgRating = useMemo(() => {
+    if (ev?.reviewsAvg != null) return ev.reviewsAvg;
     if (!reviews.length) return null;
     const sum = reviews.reduce((s, r) => s + (Number(r.rating) || 0), 0);
     return Math.round((sum / reviews.length) * 10) / 10;
-  }, [reviews]);
+  }, [ev?.reviewsAvg, reviews]);
 
   const subtotal = useMemo(() => (!ev ? 0 : ev.price * qty), [ev, qty]);
   const valid = !!ev && qty > 0;
@@ -263,8 +258,6 @@ export default function EventDetail() {
       setBooking(payload?.booking ?? null);
       setConfirmed(true);
       setMsg({ ok: true, text: "Tickets confirmed!" });
-
-      // fire confetti on success (from all 4 sides, reduced intensity)
       celebration.start(3000);
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
@@ -273,6 +266,7 @@ export default function EventDetail() {
     }
   }
 
+  // POST review to /api/events/:id and refresh from API response
   async function submitReview() {
     try {
       if (!me) throw new Error("Please sign in to post a review.");
@@ -281,20 +275,19 @@ export default function EventDetail() {
 
       setSubmitting(true);
       setFormMsg(null);
-      const r = await fetch(`/api/events/${id}/reviews`, {
+      const r = await fetch(`/api/events/${id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
         credentials: "include",
         body: JSON.stringify({ rating, title: title || null, body }),
       });
 
-      const isJson = (r.headers.get("content-type") || "").includes("application/json");
-      const payload = isJson ? await r.json().catch(() => null) : null;
-      if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
 
-      const created: Review = payload?.review ?? payload;
-      // optimistic refresh
-      setReviews((prev) => [created, ...prev]);
+      // Refresh event + reviews from response
+      setEv(data as EventItem);
+      setReviews(Array.isArray(data?.reviews) ? (data.reviews as Review[]) : []);
       setTitle("");
       setBody("");
       setRating(5);
@@ -345,7 +338,10 @@ export default function EventDetail() {
             {avgRating != null && (
               <span className="inline-flex items-center gap-1">
                 <Stars value={avgRating} />
-                <span className="ml-1">{avgRating.toFixed(1)} • {reviews.length} review{reviews.length === 1 ? "" : "s"}</span>
+                <span className="ml-1">
+                  {avgRating.toFixed(1)} • {ev.reviewsCount != null ? ev.reviewsCount : reviews.length} review
+                  {(ev.reviewsCount != null ? ev.reviewsCount : reviews.length) === 1 ? "" : "s"}
+                </span>
               </span>
             )}
           </div>
@@ -376,7 +372,10 @@ export default function EventDetail() {
               <h2 className="text-2xl font-semibold">Reviews</h2>
               {avgRating != null && (
                 <div className="text-sm text-white/80">
-                  <Stars value={avgRating} /> <span className="ml-2">{avgRating.toFixed(1)} / 5 • {reviews.length}</span>
+                  <Stars value={avgRating} />{" "}
+                  <span className="ml-2">
+                    {avgRating.toFixed(1)} / 5 • {ev.reviewsCount != null ? ev.reviewsCount : reviews.length}
+                  </span>
                 </div>
               )}
             </div>
@@ -393,11 +392,7 @@ export default function EventDetail() {
                     title={`${n} star${n > 1 ? "s" : ""}`}
                     className="hover:scale-105 transition"
                   >
-                    <Star
-                      className="h-6 w-6"
-                      stroke="currentColor"
-                      fill={n <= rating ? "currentColor" : "none"}
-                    />
+                    <Star className="h-6 w-6" stroke="currentColor" fill={n <= rating ? "currentColor" : "none"} />
                   </button>
                 ))}
                 <span className="text-sm text-white/70">{rating} / 5</span>
@@ -416,9 +411,7 @@ export default function EventDetail() {
                 onChange={(e) => setBody(e.target.value)}
               />
               <div className="flex items-center justify-between">
-                <div className="text-xs text-white/60">
-                  Be kind and constructive. One review per account.
-                </div>
+                <div className="text-xs text-white/60">Be kind and constructive. One review per account.</div>
                 <button
                   disabled={submitting}
                   onClick={submitReview}
@@ -437,32 +430,33 @@ export default function EventDetail() {
               {!revLoading && !revErr && reviews.length === 0 && (
                 <div className="text-white/70">No reviews yet. Be the first!</div>
               )}
-              {!revLoading && !revErr && reviews.map((r) => {
-                const name =
-                  (r.user?.firstName || r.user?.lastName)
-                    ? [r.user?.firstName, r.user?.lastName].filter(Boolean).join(" ")
-                    : (r.user?.email || "Guest");
-                return (
-                  <div key={r.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-xs font-semibold">
-                        {initials(name, r.user?.email)}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="font-semibold">{name}</div>
-                          <div className="text-xs text-white/60">{fmtDate(r.createdAt)}</div>
+              {!revLoading && !revErr &&
+                reviews.map((r) => {
+                  const name =
+                    (r.user?.firstName || r.user?.lastName)
+                      ? [r.user?.firstName, r.user?.lastName].filter(Boolean).join(" ")
+                      : (r.user?.email || "Guest");
+                  return (
+                    <div key={r.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-xs font-semibold">
+                          {initials(name, r.user?.email)}
                         </div>
-                        <div className="mt-1 flex items-center gap-2 text-sm">
-                          <Stars value={r.rating} />
-                          {r.title && <span className="text-white/80 font-medium">• {r.title}</span>}
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="font-semibold">{name}</div>
+                            <div className="text-xs text-white/60">{fmtDate(r.createdAt)}</div>
+                          </div>
+                          <div className="mt-1 flex items-center gap-2 text-sm">
+                            <Stars value={r.rating} />
+                            {r.title && <span className="text-white/80 font-medium">• {r.title}</span>}
+                          </div>
+                          <p className="mt-2 text-white/85 whitespace-pre-wrap">{r.body}</p>
                         </div>
-                        <p className="mt-2 text-white/85 whitespace-pre-wrap">{r.body}</p>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </section>
         </article>

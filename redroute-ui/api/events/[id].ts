@@ -1,10 +1,16 @@
 // /api/events/[id].ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import  prisma from "../_lib/prisma"; // <- named import (no .js ext)
+import prisma from "../_lib/prisma";
 
 /* helpers */
 const pickUser = (u: any) =>
-  u ? { firstName: u.firstName ?? null, lastName: u.lastName ?? null, email: u.email ?? null } : null;
+  u
+    ? {
+        firstName: u.firstName ?? null,
+        lastName: u.lastName ?? null,
+        email: u.email ?? null,
+      }
+    : null;
 
 const sanitizeRating = (n: any) => {
   const r = Number(n);
@@ -13,38 +19,21 @@ const sanitizeRating = (n: any) => {
   return Math.round(r);
 };
 
-async function getUserFromHeaders(req: VercelRequest) {
-  const id = (req.headers["x-user-id"] as string | undefined)?.trim() || "";
-  const email = (req.headers["x-user-email"] as string | undefined)?.trim() || "";
-
-  if (id) {
-    const u = await prisma.user.findUnique({ where: { id } });
-    if (u) return u;
-  }
-  if (email) {
-    const u = await prisma.user.findUnique({ where: { email } });
-    if (u) return u;
-  }
-  return null;
-}
-
-async function readJsonBody(req: VercelRequest): Promise<any> {
-  if (req.body && typeof req.body === "object") return req.body;
-  if (typeof req.body === "string") {
-    try { return JSON.parse(req.body); } catch { return {}; }
-  }
-  return await new Promise((resolve) => {
-    let raw = "";
-    req.on("data", (c) => (raw += c));
-    req.on("end", () => {
-      try { resolve(JSON.parse(raw || "{}")); } catch { resolve({}); }
-    });
-  });
+// TODO: swap with your real auth
+async function getUserFromHeaders(_req: VercelRequest) {
+  return null as
+    | null
+    | {
+        id: string; // string in your schema
+        email: string;
+        firstName?: string | null;
+        lastName?: string | null;
+      };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const idParam = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
-  const eventId = Number(idParam);
+  const { id } = req.query;
+  const eventId = Number(id);
   if (!Number.isFinite(eventId) || eventId <= 0) {
     return res.status(400).json({ error: "Invalid id" });
   }
@@ -61,7 +50,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             location: true,
             startsAt: true,
             price: true,
-            capacity: true,
             imageUrl: true,
             imageAlt: true,
           },
@@ -69,68 +57,124 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         prisma.eventReview.findMany({
           where: { eventId },
           orderBy: { createdAt: "desc" },
-          take: 50,
-          include: { user: { select: { firstName: true, lastName: true, email: true } } },
+          select: {
+            id: true,
+            rating: true,
+            title: true,
+            body: true,
+            createdAt: true,
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
         }),
-        prisma.eventReview.aggregate({ where: { eventId }, _avg: { rating: true }, _count: { _all: true } }),
+        prisma.eventReview.aggregate({
+          _avg: { rating: true },
+          _count: { _all: true },
+          where: { eventId },
+        }),
       ]);
 
-      if (!ev) return res.status(404).json({ error: "Not found" });
+      if (!ev) return res.status(404).json({ error: "Event not found" });
 
-      const reviewsAvg = agg._avg.rating ? Math.round(agg._avg.rating * 10) / 10 : null;
-      const reviewsCount = agg._count._all ?? 0;
-
-      return res.status(200).json({
+      return res.json({
         ...ev,
         reviews: reviews.map((r) => ({
           id: r.id,
-          userId: r.userId,
           rating: r.rating,
-          title: r.title,
           body: r.body,
           createdAt: r.createdAt,
           user: pickUser(r.user),
         })),
-        reviewsAvg,
-        reviewsCount,
+        reviewsAvg: agg._avg.rating ? Math.round(agg._avg.rating * 10) / 10 : null,
+        reviewsCount: agg._count._all ?? 0,
       });
     }
 
     if (req.method === "POST") {
-      const user = await getUserFromHeaders(req);
-      if (!user) return res.status(401).json({ error: "Not authenticated" });
+      const me = await getUserFromHeaders(req);
+      if (!me) return res.status(401).json({ error: "Please sign in to post a review" });
 
-      const body = await readJsonBody(req);
-      const rating = sanitizeRating(body?.rating);
-      const title: string | null = (body?.title ?? null) || null;
-      const text: string = (body?.body || "").toString().trim();
+      const { rating, body } = (req.body ?? {}) as { rating?: number | string; body?: string };
+      const safeRating = sanitizeRating(rating);
+      if (!safeRating) return res.status(400).json({ error: "Rating must be an integer 1–5" });
+      const safeBody = (body ?? "").toString().trim();
+      if (!safeBody) return res.status(400).json({ error: "Review text is required" });
 
-      if (!rating) return res.status(400).json({ error: "Rating must be 1–5" });
-      if (!text) return res.status(400).json({ error: "Review text required" });
+      const exists = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } });
+      if (!exists) return res.status(404).json({ error: "Event not found" });
 
-      const review = await prisma.eventReview.upsert({
-        where: { eventId_userId: { eventId, userId: user.id } },
-        update: { rating, title, body: text },
-        create: { eventId, userId: user.id, rating, title, body: text },
-        include: { user: { select: { firstName: true, lastName: true, email: true } } },
-      });
+      // If you want 1 review per user per event (your schema enforces @@unique([eventId, userId]))
+      // handle the unique error gracefully.
+      try {
+        await prisma.eventReview.create({
+          data: {
+            eventId,
+            userId: me.id,
+            rating: safeRating,
+            body: safeBody,
+          },
+        });
+      } catch (e: any) {
+        // Prisma unique constraint code
+        if (e?.code === "P2002") {
+          return res.status(409).json({ error: "You’ve already reviewed this event." });
+        }
+        throw e;
+      }
 
-      const agg = await prisma.eventReview.aggregate({
-        where: { eventId },
-        _avg: { rating: true },
-        _count: { _all: true },
-      });
+      const [ev, reviews, agg] = await Promise.all([
+        prisma.event.findUnique({
+          where: { id: eventId },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            location: true,
+            startsAt: true,
+            price: true,
+            imageUrl: true,
+            imageAlt: true,
+          },
+        }),
+        prisma.eventReview.findMany({
+          where: { eventId },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            rating: true,
+            title: true,
+            body: true,
+            createdAt: true,
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        }),
+        prisma.eventReview.aggregate({
+          _avg: { rating: true },
+          _count: { _all: true },
+          where: { eventId },
+        }),
+      ]);
 
-      return res.status(200).json({
-        review: {
-          id: review.id,
-          userId: review.userId,
-          rating: review.rating,
-          title: review.title,
-          body: review.body,
-          createdAt: review.createdAt,
-          user: pickUser(review.user),
-        },
+      return res.json({
+        ...ev,
+        reviews: reviews.map((r) => ({
+          id: r.id,
+          rating: r.rating,
+          body: r.body,
+          createdAt: r.createdAt,
+          user: pickUser(r.user),
+        })),
         reviewsAvg: agg._avg.rating ? Math.round(agg._avg.rating * 10) / 10 : null,
         reviewsCount: agg._count._all ?? 0,
       });
