@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CalendarDays, MapPin,  Minus, Plus, CheckCircle2, ChevronLeft, Home } from "lucide-react";
+import { CalendarDays, MapPin, Minus, Plus, CheckCircle2, ChevronLeft, Home } from "lucide-react";
 import confetti from "canvas-confetti";
 
 /* ------------ tiny auth helper ------------ */
@@ -30,6 +30,7 @@ type EventItem = {
   location: string;
   startsAt: string; // ISO
   price: number;
+  capacity?: number;
   imageUrl: string;
   imageAlt?: string | null;
 };
@@ -54,7 +55,6 @@ function fmtWhen(iso?: string) {
   });
 }
 
-/* ------------ confetti hook (no overlay canvas, all sides) ------------ */
 /* ------------ confetti hook (50% intensity, evenly spread) ------------ */
 function useCelebration() {
   const rafRef = useRef<number | null>(null);
@@ -66,8 +66,6 @@ function useCelebration() {
       rafRef.current = null;
     }
   }
-
-  // durationMs is unchanged; intensity is effectively ~0.5 via fewer shots + fewer particles
   function start(durationMs = 2800) {
     stop();
     const base = { startVelocity: 45, ticks: 200, zIndex: 9999 };
@@ -78,37 +76,27 @@ function useCelebration() {
       if (left <= 0) return stop();
 
       const progress = left / durationMs;
-      // ~half the particle count
       const particleCount = Math.max(6, Math.floor(35 * progress));
-
-      // alternate frames to evenly split corners + sweeps
       const flip = (flipRef.current ^= 1);
       const rand = (a: number, b: number) => Math.random() * (b - a) + a;
 
       if (flip) {
-        // left-top + right-bottom
         confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.05 } });
         confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.95 } });
-        // top sweep
         confetti({ ...base, particleCount: Math.ceil(particleCount * 0.8), spread: 110, origin: { x: rand(0.2, 0.8), y: 0 } });
       } else {
-        // right-top + left-bottom
         confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.05 } });
         confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.95 } });
-        // bottom sweep
         confetti({ ...base, particleCount: Math.ceil(particleCount * 0.8), spread: 110, origin: { x: rand(0.2, 0.8), y: 1 } });
       }
-
       rafRef.current = requestAnimationFrame(run);
     };
-
     rafRef.current = requestAnimationFrame(run);
   }
 
   useEffect(() => stop, []);
   return { start, stop };
 }
-
 
 /* ------------ page ------------ */
 export default function EventDetail() {
@@ -128,6 +116,7 @@ export default function EventDetail() {
   const [confirmed, setConfirmed] = useState(false);
   const [booking, setBooking] = useState<CreatedEventBooking | null>(null);
 
+  // Prime user/contact
   useEffect(() => {
     (async () => {
       try {
@@ -136,10 +125,13 @@ export default function EventDetail() {
         const full = [m.firstName, m.lastName].filter(Boolean).join(" ").trim();
         setContactName(full || (m.email ? m.email.split("@")[0] : ""));
         setContactEmail(m.email || "");
-      } catch {}
+      } catch {
+        // not authenticated is OK for viewing the page
+      }
     })();
   }, []);
 
+  // Load event by id
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -185,8 +177,6 @@ export default function EventDetail() {
       setBooking(payload?.booking ?? null);
       setConfirmed(true);
       setMsg({ ok: true, text: "Tickets confirmed!" });
-
-      // 🔥 fire confetti right here on success
       celebration.start(3000);
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
@@ -204,7 +194,7 @@ export default function EventDetail() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Fixed Home button (always visible) */}
+      {/* Fixed Home button */}
       <button
         onClick={() => navigate("/home")}
         className="fixed left-5 top-5 z-[9999] inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
@@ -233,7 +223,7 @@ export default function EventDetail() {
             <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" /> {ev.location}</span>
           </div>
 
-          <p className="mt-4 text-white/85">{ev.description}</p>
+          <p className="mt-4 text-white/80">{ev.description}</p>
 
           {confirmed && (
             <div className="mt-5 rounded-2xl border border-green-600/30 bg-green-600/15 p-4">
@@ -242,11 +232,12 @@ export default function EventDetail() {
                 <div>
                   <div className="text-lg font-semibold text-green-400">Tickets confirmed!</div>
                   <div className="text-white/85">
-                    You’re all set for <strong>{ev.name}</strong> on <strong>{fmtWhen(ev.startsAt)}</strong>.{` `}
+                    You’re all set for <strong>{ev.name}</strong> on <strong>{fmtWhen(ev.startsAt)}</strong>.{" "}
                     {booking?.contactEmail ? <>A confirmation email was sent to <strong>{booking.contactEmail}</strong>.</> : null}
                   </div>
                   <div className="mt-2 text-xs text-white/70">
-                    Reference: <span className="font-mono">{booking?.id ?? "—"}</span> • Qty: {booking?.qty ?? qty} • Paid: ${ (booking?.totalCost ?? subtotal).toLocaleString() }
+                    Reference: <span className="font-mono">{booking?.id ?? "—"}</span> • Qty: {booking?.qty ?? qty} • Paid: $
+                    {(booking?.totalCost ?? subtotal).toLocaleString()}
                   </div>
                 </div>
               </div>
@@ -306,7 +297,7 @@ export default function EventDetail() {
               </div>
 
               {msg && (
-                <div className={`mt-3 text-sm ${msg.ok ? "text-green-400" : "text-red-400"}`}>
+                <div className={`mt-3 text-sm ${msg.ok ? "text-green-400" : "text-red-400"}`} aria-live="polite">
                   {msg.text}
                 </div>
               )}
