@@ -23,6 +23,16 @@ function authHeadersFrom(me: { id?: string | null; email?: string | null }) {
 }
 
 /* ------------ types ------------ */
+type Review = {
+  id: number;
+  userId: string;
+  rating: number;
+  title?: string | null;
+  body: string;
+  createdAt: string;
+  user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
+};
+
 type EventItem = {
   id: number;
   name: string;
@@ -32,24 +42,18 @@ type EventItem = {
   price: number;
   imageUrl: string;
   imageAlt?: string | null;
+  // allow server to send these (import reviews directly from GET /api/events/:id)
+  reviews?: Review[];
+  reviewsAvg?: number | null;
+  reviewsCount?: number | null;
 };
+
 type CreatedEventBooking = {
   id: number;
   eventId: number;
   qty: number;
   totalCost: number;
   contactEmail?: string | null;
-};
-
-/* Reviews */
-type Review = {
-  id: number;
-  userId: string;
-  rating: number;
-  title?: string | null;
-  body: string;
-  createdAt: string;
-  user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
 };
 
 /* ------------ utils ------------ */
@@ -201,6 +205,13 @@ export default function EventDetail() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const e: EventItem = await r.json();
         setEv(e);
+
+        // NEW: hydrate reviews directly if provided by GET /api/events/:id
+        if (Array.isArray(e?.reviews)) {
+          setReviews(e.reviews);
+          setRevErr(null);
+          setRevLoading(false);
+        }
       } catch {
         setEv(null);
       } finally {
@@ -209,12 +220,25 @@ export default function EventDetail() {
     })();
   }, [id]);
 
-  // Load reviews
+  // Load reviews — prefer GET /api/events/:id (payload.reviews), fallback to /api/events/:id/reviews
   useEffect(() => {
     (async () => {
       if (!id) return;
       setRevLoading(true);
       try {
+        // prefer the main endpoint (it includes reviews per your API)
+        const r1 = await fetch(`/api/events/${id}`, { credentials: "include" });
+        if (r1.ok && (r1.headers.get("content-type") || "").includes("application/json")) {
+          const p1 = await r1.json().catch(() => null);
+          if (p1 && Array.isArray(p1.reviews)) {
+            setReviews(p1.reviews);
+            setRevErr(null);
+            setRevLoading(false);
+            return;
+          }
+        }
+
+        // fallback to the /reviews sub-route if you still have it
         const r = await fetch(`/api/events/${id}/reviews`, { credentials: "include" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data: Review[] = await r.json();
@@ -264,7 +288,6 @@ export default function EventDetail() {
       setConfirmed(true);
       setMsg({ ok: true, text: "Tickets confirmed!" });
 
-      // fire confetti on success (from all 4 sides, reduced intensity)
       celebration.start(3000);
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
@@ -281,20 +304,33 @@ export default function EventDetail() {
 
       setSubmitting(true);
       setFormMsg(null);
-      const r = await fetch(`/api/events/${id}/reviews`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
-        credentials: "include",
-        body: JSON.stringify({ rating, title: title || null, body }),
-      });
 
-      const isJson = (r.headers.get("content-type") || "").includes("application/json");
-      const payload = isJson ? await r.json().catch(() => null) : null;
-      if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
+      // NEW: prefer POST /api/events/:id (your API supports this), fallback to /api/events/:id/reviews
+      const postOnce = (url: string) =>
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
+          credentials: "include",
+          body: JSON.stringify({ rating, title: title || null, body }),
+        });
+
+      let resp = await postOnce(`/api/events/${id}`); // main route (supports POST)
+      if (!resp.ok && (resp.status === 404 || resp.status === 405)) {
+        resp = await postOnce(`/api/events/${id}/reviews`); // fallback if needed
+      }
+
+      const isJson = (resp.headers.get("content-type") || "").includes("application/json");
+      const payload = isJson ? await resp.json().catch(() => null) : null;
+      if (!resp.ok) throw new Error(payload?.error || `HTTP ${resp.status}`);
 
       const created: Review = payload?.review ?? payload;
-      // optimistic refresh
-      setReviews((prev) => [created, ...prev]);
+
+      // upsert by userId (one review per user per event)
+      setReviews(prev => {
+        const rest = prev.filter(x => x.userId !== created.userId);
+        return [created, ...rest];
+      });
+
       setTitle("");
       setBody("");
       setRating(5);
