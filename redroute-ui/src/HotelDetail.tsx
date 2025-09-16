@@ -24,15 +24,7 @@ function authHeadersFrom(me: { id?: string | null; email?: string | null }) {
 
 /* ------------------------- types & helpers ------------------------- */
 type HotelImage = { url: string; alt?: string | null };
-type Hotel = {
-  id: number;
-  name: string;
-  city: string;
-  price: number;
-  rating: number | null;
-  capacity: number;
-  images: HotelImage[];
-};
+type ReviewUser = { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
 
 type Review = {
   id: number;
@@ -41,7 +33,20 @@ type Review = {
   title?: string | null;
   body: string;
   createdAt: string;
-  user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
+  user?: ReviewUser;
+};
+
+type Hotel = {
+  id: number;
+  name: string;
+  city: string;
+  price: number;
+  rating: number | null;
+  capacity: number;
+  images: HotelImage[];
+  // allow reviews if server includes them
+  reviews?: Review[];
+  reviewsCount?: number | null;
 };
 
 function plusDays(d: Date, n: number) {
@@ -250,7 +255,7 @@ function DateRangePopover({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ type: "spring", stiffness: 240, damping: 20 }}
-            className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg[rgba(0,0,0,0.7)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
+            className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg-[rgba(0,0,0,0.7)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
             role="dialog"
           >
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.06]">
@@ -361,6 +366,7 @@ export default function HotelDetail() {
     })();
   }, []);
 
+  // Load hotel (and hydrate reviews if included)
   useEffect(() => {
     (async () => {
       if (!id) {
@@ -390,6 +396,13 @@ export default function HotelDetail() {
         const data: Hotel = await r.json();
         setHotel(data);
         setErr(null);
+
+        // hydrate reviews if present
+        if (Array.isArray((data as any)?.reviews)) {
+          setReviews((data as any).reviews);
+          setRevErr(null);
+          setRevLoading(false);
+        }
       } catch (e: any) {
         setErr(e?.message || "Could not load hotel");
       } finally {
@@ -400,12 +413,24 @@ export default function HotelDetail() {
     return () => abortRef.current?.abort();
   }, [id]);
 
-  // Load reviews
+  // Load reviews: prefer /api/hotels/:id (payload.reviews), fallback to /api/hotels/:id/reviews
   useEffect(() => {
     (async () => {
       if (!id) return;
       setRevLoading(true);
       try {
+        const r1 = await fetch(`/api/hotels/${id}`, { credentials: "include" });
+        if (r1.ok && (r1.headers.get("content-type") || "").includes("application/json")) {
+          const p1 = await r1.json().catch(() => null);
+          if (p1 && Array.isArray(p1.reviews)) {
+            setReviews(p1.reviews);
+            setRevErr(null);
+            setRevLoading(false);
+            return;
+          }
+        }
+
+        // fallback to sub-route
         const r = await fetch(`/api/hotels/${id}/reviews`, { credentials: "include" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data: Review[] = await r.json();
@@ -459,19 +484,46 @@ export default function HotelDetail() {
 
       setSubmitting(true);
       setFormMsg(null);
-      const r = await fetch(`/api/hotels/${id}/reviews`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
-        credentials: "include",
-        body: JSON.stringify({ rating, title: title || null, body }),
-      });
 
-      const isJson = (r.headers.get("content-type") || "").includes("application/json");
-      const payload = isJson ? await r.json().catch(() => null) : null;
-      if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
+      // prefer POST /api/hotels/:id; fallback to /api/hotels/:id/reviews
+      const postOnce = (url: string) =>
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
+          credentials: "include",
+          body: JSON.stringify({ rating, title: title || null, body }),
+        });
+
+      let resp = await postOnce(`/api/hotels/${id}`);
+      if (!resp.ok && (resp.status === 404 || resp.status === 405)) {
+        resp = await postOnce(`/api/hotels/${id}/reviews`);
+      }
+
+      const isJson = (resp.headers.get("content-type") || "").includes("application/json");
+      const payload = isJson ? await resp.json().catch(() => null) : null;
+      if (!resp.ok) throw new Error(payload?.error || `HTTP ${resp.status}`);
 
       const created: Review = payload?.review ?? payload;
-      setReviews((prev) => [created, ...prev]);
+      setReviews((prev) => {
+        // upsert by userId (one review per user per hotel)
+        const rest = prev.filter((x) => x.userId !== created.userId);
+        return [created, ...rest];
+      });
+
+      // reflect aggregates if returned
+      if (payload?.reviewsAvg != null || payload?.reviewsCount != null) {
+        setHotel((h) =>
+          h
+            ? {
+                ...h,
+                rating: payload?.reviewsAvg != null ? Number(payload.reviewsAvg) : h.rating,
+                reviewsCount:
+                  payload?.reviewsCount != null ? Number(payload.reviewsCount) : h.reviewsCount,
+              }
+            : h
+        );
+      }
+
       setTitle("");
       setBody("");
       setRating(5);
@@ -741,7 +793,7 @@ export default function HotelDetail() {
                             <Stars value={r.rating} />
                             {r.title && <span className="text-white/80 font-medium">• {r.title}</span>}
                           </div>
-                          <p className="mt-2 text-white/85 whitespace-pre-wrap">{r.body}</p>
+                          <p className="mt-2 text-white/80 whitespace-pre-wrap">{r.body}</p>
                         </div>
                       </div>
                     </div>
