@@ -388,17 +388,6 @@ export default function HotelDetail() {
           throw new Error(j?.error || `Failed to load (HTTP ${r.status})`);
         }
         const data: Hotel = await r.json();
-
-        // ⬇️ NEW: hydrate reviews from the same payload (if provided by API)
-        try {
-          const payloadAny = data as unknown as any;
-          if (Array.isArray(payloadAny?.reviews)) {
-            setReviews(payloadAny.reviews);
-            setRevErr(null);
-            setRevLoading(false);
-          }
-        } catch {}
-
         setHotel(data);
         setErr(null);
       } catch (e: any) {
@@ -411,20 +400,16 @@ export default function HotelDetail() {
     return () => abortRef.current?.abort();
   }, [id]);
 
-  // Load reviews (from the SAME endpoint) — keeps your UI flow intact
+  // Load reviews
   useEffect(() => {
     (async () => {
       if (!id) return;
       setRevLoading(true);
       try {
-        // ⬇️ CHANGED: call /api/hotels/:id and read .reviews (no /reviews sub-route)
-        const r = await fetch(`/api/hotels/${id}`, { credentials: "include" });
-        const isJson = (r.headers.get("content-type") || "").includes("application/json");
-        const payload = isJson ? await r.json().catch(() => null) : null;
-        if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
-
-        const list = Array.isArray(payload?.reviews) ? payload.reviews : [];
-        setReviews(list);
+        const r = await fetch(`/api/hotels/${id}/reviews`, { credentials: "include" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data: Review[] = await r.json();
+        setReviews(Array.isArray(data) ? data : []);
         setRevErr(null);
       } catch (e: any) {
         setRevErr(e?.message || "Failed to load reviews");
@@ -474,9 +459,7 @@ export default function HotelDetail() {
 
       setSubmitting(true);
       setFormMsg(null);
-
-      // ⬇️ CHANGED: POST to /api/hotels/:id (not /reviews)
-      const r = await fetch(`/api/hotels/${id}`, {
+      const r = await fetch(`/api/hotels/${id}/reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
         credentials: "include",
@@ -487,14 +470,8 @@ export default function HotelDetail() {
       const payload = isJson ? await r.json().catch(() => null) : null;
       if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
 
-      // handle either { review, reviewsAvg, reviewsCount } or just the review itself
       const created: Review = payload?.review ?? payload;
-      setReviews((prev) => {
-        // upsert by userId so a user edits their own review
-        const rest = prev.filter(x => x.userId !== created.userId);
-        return [created, ...rest];
-      });
-
+      setReviews((prev) => [created, ...prev]);
       setTitle("");
       setBody("");
       setRating(5);
