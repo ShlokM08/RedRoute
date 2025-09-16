@@ -620,4 +620,4 @@ export default function EventDetail() {
   );
 }
 
-//just sending a commit
+//just sending a commits
