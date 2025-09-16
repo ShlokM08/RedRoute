@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CalendarDays, MapPin,  Minus, Plus, CheckCircle2, ChevronLeft, Home } from "lucide-react";
+import { CalendarDays, MapPin, Minus, Plus, CheckCircle2, ChevronLeft, Home, Star, Send } from "lucide-react";
 import confetti from "canvas-confetti";
 
 /* ------------ tiny auth helper ------------ */
@@ -41,6 +41,17 @@ type CreatedEventBooking = {
   contactEmail?: string | null;
 };
 
+/* Reviews */
+type Review = {
+  id: number;
+  userId: string;
+  rating: number;
+  title?: string | null;
+  body: string;
+  createdAt: string;
+  user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
+};
+
 /* ------------ utils ------------ */
 function fmtWhen(iso?: string) {
   if (!iso) return "";
@@ -53,8 +64,48 @@ function fmtWhen(iso?: string) {
     minute: "2-digit",
   });
 }
+function fmtDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+function initials(name?: string | null, email?: string | null) {
+  const n = (name || "").trim();
+  if (n) {
+    const parts = n.split(/\s+/);
+    return (parts[0][0] || "") + (parts[1]?.[0] || "");
+  }
+  const e = (email || "").trim();
+  return e ? e[0]?.toUpperCase() || "U" : "U";
+}
+function Stars({ value, size = 16 }: { value: number; size?: number }) {
+  const full = Math.floor(value);
+  const hasHalf = value - full >= 0.5;
+  const arr = [0, 1, 2, 3, 4];
+  return (
+    <div className="inline-flex items-center gap-0.5" title={`${value.toFixed(1)} / 5`}>
+      {arr.map((i) => (
+        <Star
+          key={i}
+          className="opacity-90"
+          width={size}
+          height={size}
+          stroke="currentColor"
+          fill={i < full ? "currentColor" : hasHalf && i === full ? "url(#half)" : "none"}
+        />
+      ))}
+      {/* gradient for half star */}
+      <svg width="0" height="0">
+        <defs>
+          <linearGradient id="half">
+            <stop offset="50%" stopColor="currentColor" />
+            <stop offset="50%" stopColor="transparent" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  );
+}
 
-/* ------------ confetti hook (no overlay canvas, all sides) ------------ */
 /* ------------ confetti hook (50% intensity, evenly spread) ------------ */
 function useCelebration() {
   const rafRef = useRef<number | null>(null);
@@ -67,7 +118,6 @@ function useCelebration() {
     }
   }
 
-  // durationMs is unchanged; intensity is effectively ~0.5 via fewer shots + fewer particles
   function start(durationMs = 2800) {
     stop();
     const base = { startVelocity: 45, ticks: 200, zIndex: 9999 };
@@ -78,24 +128,17 @@ function useCelebration() {
       if (left <= 0) return stop();
 
       const progress = left / durationMs;
-      // ~half the particle count
       const particleCount = Math.max(6, Math.floor(35 * progress));
-
-      // alternate frames to evenly split corners + sweeps
       const flip = (flipRef.current ^= 1);
       const rand = (a: number, b: number) => Math.random() * (b - a) + a;
 
       if (flip) {
-        // left-top + right-bottom
         confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.05 } });
         confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.95 } });
-        // top sweep
         confetti({ ...base, particleCount: Math.ceil(particleCount * 0.8), spread: 110, origin: { x: rand(0.2, 0.8), y: 0 } });
       } else {
-        // right-top + left-bottom
         confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.05 } });
         confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.95 } });
-        // bottom sweep
         confetti({ ...base, particleCount: Math.ceil(particleCount * 0.8), spread: 110, origin: { x: rand(0.2, 0.8), y: 1 } });
       }
 
@@ -109,14 +152,13 @@ function useCelebration() {
   return { start, stop };
 }
 
-
 /* ------------ page ------------ */
 export default function EventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const celebration = useCelebration();
 
-  const [me, setMe] = useState<{ id?: string | null; email?: string | null } | null>(null);
+  const [me, setMe] = useState<{ id?: string | null; email?: string | null; firstName?: string | null; lastName?: string | null } | null>(null);
   const [ev, setEv] = useState<EventItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState(1);
@@ -128,11 +170,23 @@ export default function EventDetail() {
   const [confirmed, setConfirmed] = useState(false);
   const [booking, setBooking] = useState<CreatedEventBooking | null>(null);
 
+  // Reviews state
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [revLoading, setRevLoading] = useState(true);
+  const [revErr, setRevErr] = useState<string | null>(null);
+
+  // New review form
+  const [rating, setRating] = useState(5);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [formMsg, setFormMsg] = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
         const m = await getMe();
-        setMe({ id: m.id, email: m.email });
+        setMe(m);
         const full = [m.firstName, m.lastName].filter(Boolean).join(" ").trim();
         setContactName(full || (m.email ? m.email.split("@")[0] : ""));
         setContactEmail(m.email || "");
@@ -155,6 +209,31 @@ export default function EventDetail() {
       }
     })();
   }, [id]);
+
+  // Load reviews
+  useEffect(() => {
+    (async () => {
+      if (!id) return;
+      setRevLoading(true);
+      try {
+        const r = await fetch(`/api/events/${id}/reviews`, { credentials: "include" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data: Review[] = await r.json();
+        setReviews(Array.isArray(data) ? data : []);
+        setRevErr(null);
+      } catch (e: any) {
+        setRevErr(e?.message || "Failed to load reviews");
+      } finally {
+        setRevLoading(false);
+      }
+    })();
+  }, [id]);
+
+  const avgRating = useMemo(() => {
+    if (!reviews.length) return null;
+    const sum = reviews.reduce((s, r) => s + (Number(r.rating) || 0), 0);
+    return Math.round((sum / reviews.length) * 10) / 10;
+  }, [reviews]);
 
   const subtotal = useMemo(() => (!ev ? 0 : ev.price * qty), [ev, qty]);
   const valid = !!ev && qty > 0;
@@ -186,12 +265,45 @@ export default function EventDetail() {
       setConfirmed(true);
       setMsg({ ok: true, text: "Tickets confirmed!" });
 
-      // 🔥 fire confetti right here on success
+      // fire confetti on success
       celebration.start(3000);
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function submitReview() {
+    try {
+      if (!me) throw new Error("Please sign in to post a review.");
+      if (!id) throw new Error("Missing event id.");
+      if (!rating || !body.trim()) throw new Error("Please add a rating and some text.");
+
+      setSubmitting(true);
+      setFormMsg(null);
+      const r = await fetch(`/api/events/${id}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
+        credentials: "include",
+        body: JSON.stringify({ rating, title: title || null, body }),
+      });
+
+      const isJson = (r.headers.get("content-type") || "").includes("application/json");
+      const payload = isJson ? await r.json().catch(() => null) : null;
+      if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
+
+      const created: Review = payload?.review ?? payload;
+      // optimistic refresh
+      setReviews((prev) => [created, ...prev]);
+      setTitle("");
+      setBody("");
+      setRating(5);
+      setFormMsg("Thanks! Your review was posted.");
+    } catch (e: any) {
+      setFormMsg(e?.message || "Could not post review.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -216,7 +328,7 @@ export default function EventDetail() {
       </button>
 
       <div className="mx-auto max-w-5xl p-6 grid grid-cols-1 gap-6 md:grid-cols-[2fr_1fr]">
-        {/* LEFT: event card + confirmation banner */}
+        {/* LEFT: event card + confirmation banner + reviews */}
         <article className="rounded-3xl border border-white/10 bg-white/5 p-4">
           <div className="relative h-72 w-full overflow-hidden rounded-2xl">
             <img
@@ -231,6 +343,12 @@ export default function EventDetail() {
           <div className="mt-2 flex flex-wrap items-center gap-3 text-white/80 text-sm">
             <span className="inline-flex items-center gap-1"><CalendarDays className="h-4 w-4" /> {fmtWhen(ev.startsAt)}</span>
             <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" /> {ev.location}</span>
+            {avgRating != null && (
+              <span className="inline-flex items-center gap-1">
+                <Stars value={avgRating} />
+                <span className="ml-1">{avgRating.toFixed(1)} • {reviews.length} review{reviews.length === 1 ? "" : "s"}</span>
+              </span>
+            )}
           </div>
 
           <p className="mt-4 text-white/85">{ev.description}</p>
@@ -242,7 +360,7 @@ export default function EventDetail() {
                 <div>
                   <div className="text-lg font-semibold text-green-400">Tickets confirmed!</div>
                   <div className="text-white/85">
-                    You’re all set for <strong>{ev.name}</strong> on <strong>{fmtWhen(ev.startsAt)}</strong>.{` `}
+                    You’re all set for <strong>{ev.name}</strong> on <strong>{fmtWhen(ev.startsAt)}</strong>.{" "}
                     {booking?.contactEmail ? <>A confirmation email was sent to <strong>{booking.contactEmail}</strong>.</> : null}
                   </div>
                   <div className="mt-2 text-xs text-white/70">
@@ -252,6 +370,102 @@ export default function EventDetail() {
               </div>
             </div>
           )}
+
+          {/* REVIEWS */}
+          <section className="mt-8">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-2xl font-semibold">Reviews</h2>
+              {avgRating != null && (
+                <div className="text-sm text-white/80">
+                  <Stars value={avgRating} /> <span className="ml-2">{avgRating.toFixed(1)} / 5 • {reviews.length}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Write review */}
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <div className="mb-2 text-sm text-white/80">Write a review</div>
+              <div className="mb-3 flex items-center gap-2">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRating(n)}
+                    title={`${n} star${n > 1 ? "s" : ""}`}
+                    className="hover:scale-105 transition"
+                  >
+                    <Star
+                      className="h-6 w-6"
+                      stroke="currentColor"
+                      fill={n <= rating ? "currentColor" : "none"}
+                    />
+                  </button>
+                ))}
+                <span className="text-sm text-white/70">{rating} / 5</span>
+              </div>
+              <input
+                className="mb-2 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                placeholder="Title (optional)"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              <textarea
+                className="mb-3 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                placeholder="Share your experience…"
+                rows={3}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+              />
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-white/60">
+                  Be kind and constructive. One review per account.
+                </div>
+                <button
+                  disabled={submitting}
+                  onClick={submitReview}
+                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold bg-[#E50914] hover:brightness-110 disabled:opacity-60"
+                >
+                  <Send className="h-4 w-4" /> {submitting ? "Posting…" : "Post"}
+                </button>
+              </div>
+              {formMsg && <div className="mt-2 text-sm text-white/80">{formMsg}</div>}
+            </div>
+
+            {/* List */}
+            <div className="mt-4 space-y-3">
+              {revLoading && <div className="text-white/70">Loading reviews…</div>}
+              {!revLoading && revErr && <div className="text-red-400">{revErr}</div>}
+              {!revLoading && !revErr && reviews.length === 0 && (
+                <div className="text-white/70">No reviews yet. Be the first!</div>
+              )}
+              {!revLoading && !revErr && reviews.map((r) => {
+                const name =
+                  (r.user?.firstName || r.user?.lastName)
+                    ? [r.user?.firstName, r.user?.lastName].filter(Boolean).join(" ")
+                    : (r.user?.email || "Guest");
+                return (
+                  <div key={r.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-xs font-semibold">
+                        {initials(name, r.user?.email)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-semibold">{name}</div>
+                          <div className="text-xs text-white/60">{fmtDate(r.createdAt)}</div>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-sm">
+                          <Stars value={r.rating} />
+                          {r.title && <span className="text-white/80 font-medium">• {r.title}</span>}
+                        </div>
+                        <p className="mt-2 text-white/85 whitespace-pre-wrap">{r.body}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </article>
 
         {/* RIGHT: purchase panel / receipt */}

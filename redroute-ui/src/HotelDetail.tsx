@@ -1,20 +1,26 @@
-// src/HotelDetail.tsx
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Star, MapPin, Minus, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Star, MapPin, Minus, Plus, Send } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-/* -------------------- auth helper (keeps real user) -------------------- */
-// async function getAuthHeaders(): Promise<Record<string, string>> {
-//   const r = await fetch("/api/auth/me", { credentials: "include" });
-//   if (!r.ok) throw new Error("Not authenticated");
-//   const me = await r.json().catch(() => ({}));
-//   const id = me?.user?.id ?? me?.id ?? null;
-//   const email = me?.user?.email ?? me?.email ?? null;
-//   if (id) return { "x-user-id": String(id) };
-//   if (email) return { "x-user-email": String(email) };
-//   throw new Error("Not authenticated");
-// }
+/* -------------------- auth helper (for posting reviews) -------------------- */
+async function getMe() {
+  const r = await fetch("/api/auth/me", { credentials: "include" });
+  if (!r.ok) throw new Error("Not authenticated");
+  const me = await r.json().catch(() => ({}));
+  return {
+    id: me?.user?.id ?? me?.id ?? null,
+    email: me?.user?.email ?? me?.email ?? null,
+    firstName: me?.user?.firstName ?? me?.firstName ?? null,
+    lastName: me?.user?.lastName ?? me?.lastName ?? null,
+  };
+}
+function authHeadersFrom(me: { id?: string | null; email?: string | null }) {
+  const h: Record<string, string> = {};
+  if (me.id) h["x-user-id"] = String(me.id);
+  if (me.email) h["x-user-email"] = String(me.email);
+  return h;
+}
 
 /* ------------------------- types & helpers ------------------------- */
 type HotelImage = { url: string; alt?: string | null };
@@ -28,6 +34,16 @@ type Hotel = {
   images: HotelImage[];
 };
 
+type Review = {
+  id: number;
+  userId: string;
+  rating: number;
+  title?: string | null;
+  body: string;
+  createdAt: string;
+  user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
+};
+
 function plusDays(d: Date, n: number) {
   const x = new Date(d);
   x.setDate(x.getDate() + n);
@@ -38,6 +54,45 @@ function fmtDateYMD(d: Date) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
+}
+function fmtDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+function initials(name?: string | null, email?: string | null) {
+  const n = (name || "").trim();
+  if (n) {
+    const parts = n.split(/\s+/);
+    return (parts[0][0] || "") + (parts[1]?.[0] || "");
+  }
+  const e = (email || "").trim();
+  return e ? e[0]?.toUpperCase() || "U" : "U";
+}
+function Stars({ value, size = 16 }: { value: number; size?: number }) {
+  const full = Math.floor(value);
+  const hasHalf = value - full >= 0.5;
+  const arr = [0, 1, 2, 3, 4];
+  return (
+    <span className="inline-flex items-center gap-0.5" title={`${value.toFixed(1)} / 5`}>
+      {arr.map((i) => (
+        <Star
+          key={i}
+          width={size}
+          height={size}
+          stroke="currentColor"
+          fill={i < full ? "currentColor" : hasHalf && i === full ? "url(#half)" : "none"}
+        />
+      ))}
+      <svg width="0" height="0">
+        <defs>
+          <linearGradient id="half">
+            <stop offset="50%" stopColor="currentColor" />
+            <stop offset="50%" stopColor="transparent" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </span>
+  );
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~ DateRangePopover (pill calendar) ~~~~~~~~~~~~~~~~~~~~~ */
@@ -195,7 +250,7 @@ function DateRangePopover({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ type: "spring", stiffness: 240, damping: 20 }}
-            className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg-[rgba(0,0,0,0.7)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
+            className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg[rgba(0,0,0,0.7)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
             role="dialog"
           >
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.06]">
@@ -265,6 +320,8 @@ export default function HotelDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  const [me, setMe] = useState<{ id?: string | null; email?: string | null; firstName?: string | null; lastName?: string | null } | null>(null);
+
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -282,6 +339,27 @@ export default function HotelDetail() {
   const ci = useMemo(() => (checkIn ? new Date(checkIn) : null), [checkIn]);
   const co = useMemo(() => (checkOut ? new Date(checkOut) : null), [checkOut]);
   const datesValid = useMemo(() => !!(ci && co && +co > +ci), [ci, co]);
+
+  // Reviews
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [revLoading, setRevLoading] = useState(true);
+  const [revErr, setRevErr] = useState<string | null>(null);
+
+  // New review
+  const [rating, setRating] = useState(5);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [formMsg, setFormMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const m = await getMe();
+        setMe(m);
+      } catch {}
+    })();
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -322,39 +400,90 @@ export default function HotelDetail() {
     return () => abortRef.current?.abort();
   }, [id]);
 
+  // Load reviews
+  useEffect(() => {
+    (async () => {
+      if (!id) return;
+      setRevLoading(true);
+      try {
+        const r = await fetch(`/api/hotels/${id}/reviews`, { credentials: "include" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data: Review[] = await r.json();
+        setReviews(Array.isArray(data) ? data : []);
+        setRevErr(null);
+      } catch (e: any) {
+        setRevErr(e?.message || "Failed to load reviews");
+      } finally {
+        setRevLoading(false);
+      }
+    })();
+  }, [id]);
+
+  const avgRating = useMemo(() => {
+    if (!reviews.length) return hotel?.rating ?? null;
+    const sum = reviews.reduce((s, r) => s + (Number(r.rating) || 0), 0);
+    return Math.round((sum / reviews.length) * 10) / 10;
+  }, [reviews, hotel?.rating]);
+
   const cap = hotel?.capacity ?? 10;
 
-async function reserve() {
-  if (!hotel || !id) return;
+  async function reserve() {
+    if (!hotel || !id) return;
 
-  if (!datesValid) {
-    setReserveMsg?.({ ok: false, text: "Please select a valid date range." });
-    return;
+    if (!datesValid) {
+      setReserveMsg?.({ ok: false, text: "Please select a valid date range." });
+      return;
+    }
+    const totalGuests = Math.max(1, Math.min(cap, guests));
+
+    const payload = {
+      hotelId: Number(id),
+      name: hotel.name,
+      city: hotel.city,
+      image: hotel.images?.[0]?.url || "/images/featured_hotel.avif",
+      price: hotel.price, // nightly
+      checkIn,
+      checkOut,
+      guests: totalGuests,
+    };
+
+    try { sessionStorage.setItem("rr_checkout", JSON.stringify(payload)); } catch {}
+    navigate("/checkout", { state: payload });
   }
-  const totalGuests = Math.max(1, Math.min(cap, guests));
 
-  // Build payload we’ll need in /checkout
-  const payload = {
-    hotelId: Number(id),
-    name: hotel.name,
-    city: hotel.city,
-    image: hotel.images?.[0]?.url || "/images/featured_hotel.avif",
-    price: hotel.price,          // nightly
-    checkIn,
-    checkOut,
-    guests: totalGuests,
-  };
+  async function submitReview() {
+    try {
+      if (!me) throw new Error("Please sign in to post a review.");
+      if (!id) throw new Error("Missing hotel id.");
+      if (!rating || !body.trim()) throw new Error("Please add a rating and some text.");
 
-  // Save to sessionStorage so it survives redirects/login/refresh
-  try { sessionStorage.setItem("rr_checkout", JSON.stringify(payload)); } catch {}
+      setSubmitting(true);
+      setFormMsg(null);
+      const r = await fetch(`/api/hotels/${id}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
+        credentials: "include",
+        body: JSON.stringify({ rating, title: title || null, body }),
+      });
 
-  // Navigate with state too (fast path)
-  navigate("/checkout", { state: payload });
-}
+      const isJson = (r.headers.get("content-type") || "").includes("application/json");
+      const payload = isJson ? await r.json().catch(() => null) : null;
+      if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
 
+      const created: Review = payload?.review ?? payload;
+      setReviews((prev) => [created, ...prev]);
+      setTitle("");
+      setBody("");
+      setRating(5);
+      setFormMsg("Thanks! Your review was posted.");
+    } catch (e: any) {
+      setFormMsg(e?.message || "Could not post review.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
-
-  /* --------------------------- UI (your style) -------------------------- */
+  /* --------------------------- UI -------------------------- */
   return (
     <div className="min-h-screen bg-black text-white">
       <button
@@ -411,9 +540,10 @@ async function reserve() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h1 className="text-3xl font-bold">{hotel.name}</h1>
-                <div className="mt-1 flex items-center gap-1 text-sm text-white/80">
-                  <Star className="h-4 w-4" />
-                  {hotel.rating ?? "—"} • Capacity {cap}
+                <div className="mt-1 flex items-center gap-2 text-sm text-white/80">
+                  {avgRating != null && <Stars value={avgRating} />}
+                  <span>{avgRating != null ? `${avgRating.toFixed(1)}★` : (hotel.rating ?? "—")}</span>
+                  <span>• Capacity {hotel.capacity}</span>
                 </div>
               </div>
               <div className="text-right">
@@ -439,7 +569,7 @@ async function reserve() {
                 </div>
 
                 <label className="text-sm">
-                  <span className="mb-1 block text-white/80">Guests (max {cap})</span>
+                  <span className="mb-1 block text-white/80">Guests (max {hotel.capacity})</span>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -454,7 +584,7 @@ async function reserve() {
 
                     <button
                       type="button"
-                      onClick={() => setGuests((g) => Math.min(cap, g + 1))}
+                      onClick={() => setGuests((g) => Math.min(hotel.capacity, g + 1))}
                       className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white text-black hover:bg-white/90"
                       aria-label="Increase guests"
                     >
@@ -473,9 +603,7 @@ async function reserve() {
                   </button>
                   {reserveMsg && (
                     <div
-                      className={`mt-2 text-sm ${
-                        reserveMsg.ok ? "text-green-400" : "text-red-400"
-                      }`}
+                      className={`mt-2 text-sm ${reserveMsg.ok ? "text-green-400" : "text-red-400"}`}
                     >
                       {reserveMsg.text}
                     </div>
@@ -509,7 +637,7 @@ async function reserve() {
             <div>
               <h2 className="mb-2 text-2xl font-semibold">Overview</h2>
               <p className="text-white/80">
-                A modern stay in {hotel.city}, rated {hotel.rating ?? "—"}★ and starting at ${hotel.price}/night,
+                A modern stay in {hotel.city}, rated {avgRating != null ? `${avgRating.toFixed(1)}★` : `${hotel.rating ?? "—"}★`} and starting at ${hotel.price}/night,
                 awaits travelers looking for more than just a room. Perfect for a cinematic escape with RedRoute’s
                 signature glow, feather-light interactions, and ultra-fast booking.
                 <br />
@@ -525,6 +653,102 @@ async function reserve() {
                 RedRoute booking makes this hotel the perfect base for memories that linger long after checkout.
               </p>
             </div>
+
+            {/* REVIEWS */}
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-2xl font-semibold">Reviews</h2>
+                {avgRating != null && (
+                  <div className="text-sm text-white/80">
+                    <Stars value={avgRating} /> <span className="ml-2">{avgRating.toFixed(1)} / 5 • {reviews.length}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Write review */}
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                <div className="mb-2 text-sm text-white/80">Write a review</div>
+                <div className="mb-3 flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setRating(n)}
+                      title={`${n} star${n > 1 ? "s" : ""}`}
+                      className="hover:scale-105 transition"
+                    >
+                      <Star
+                        className="h-6 w-6"
+                        stroke="currentColor"
+                        fill={n <= rating ? "currentColor" : "none"}
+                      />
+                    </button>
+                  ))}
+                  <span className="text-sm text-white/70">{rating} / 5</span>
+                </div>
+                <input
+                  className="mb-2 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                  placeholder="Title (optional)"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+                <textarea
+                  className="mb-3 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                  placeholder="Share your experience…"
+                  rows={3}
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                />
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-white/60">
+                    Be kind and constructive. One review per account.
+                  </div>
+                  <button
+                    disabled={submitting}
+                    onClick={submitReview}
+                    className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold bg-[#E50914] hover:brightness-110 disabled:opacity-60"
+                  >
+                    <Send className="h-4 w-4" /> {submitting ? "Posting…" : "Post"}
+                  </button>
+                </div>
+                {formMsg && <div className="mt-2 text-sm text-white/80">{formMsg}</div>}
+              </div>
+
+              {/* List */}
+              <div className="mt-4 space-y-3">
+                {revLoading && <div className="text-white/70">Loading reviews…</div>}
+                {!revLoading && revErr && <div className="text-red-400">{revErr}</div>}
+                {!revLoading && !revErr && reviews.length === 0 && (
+                  <div className="text-white/70">No reviews yet. Be the first!</div>
+                )}
+                {!revLoading && !revErr && reviews.map((r) => {
+                  const name =
+                    (r.user?.firstName || r.user?.lastName)
+                      ? [r.user?.firstName, r.user?.lastName].filter(Boolean).join(" ")
+                      : (r.user?.email || "Guest");
+                  return (
+                    <div key={r.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-xs font-semibold">
+                          {initials(name, r.user?.email)}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="font-semibold">{name}</div>
+                            <div className="text-xs text-white/60">{fmtDate(r.createdAt)}</div>
+                          </div>
+                          <div className="mt-1 flex items-center gap-2 text-sm">
+                            <Stars value={r.rating} />
+                            {r.title && <span className="text-white/80 font-medium">• {r.title}</span>}
+                          </div>
+                          <p className="mt-2 text-white/85 whitespace-pre-wrap">{r.body}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           </div>
         </>
       )}
