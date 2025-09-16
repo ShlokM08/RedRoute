@@ -1,7 +1,6 @@
-import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Star, MapPin, Minus, Plus, Send } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { CalendarDays, Home, MapPin, Minus, Plus, Send, Star } from "lucide-react";
 
 /* -------------------- auth helper (for posting reviews) -------------------- */
 async function getMe() {
@@ -31,6 +30,7 @@ type Hotel = {
   price: number;
   rating: number | null;
   capacity: number;
+  description?: string | null;
   images: HotelImage[];
 };
 
@@ -44,17 +44,6 @@ type Review = {
   user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
 };
 
-function plusDays(d: Date, n: number) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-function fmtDateYMD(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-}
 function fmtDate(iso: string) {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -63,7 +52,7 @@ function initials(name?: string | null, email?: string | null) {
   const n = (name || "").trim();
   if (n) {
     const parts = n.split(/\s+/);
-    return (parts[0][0] || "") + (parts[1]?.[0] || "");
+    return (parts[0][0] || "").toUpperCase() + (parts[1]?.[0] || "").toUpperCase();
   }
   const e = (email || "").trim();
   return e ? e[0]?.toUpperCase() || "U" : "U";
@@ -95,312 +84,68 @@ function Stars({ value, size = 16 }: { value: number; size?: number }) {
   );
 }
 
-/* ~~~~~~~~~~~~~~~~~~~~~ DateRangePopover (pill calendar) ~~~~~~~~~~~~~~~~~~~~~ */
-type DayCell = { date: Date; currentMonth: boolean; isToday: boolean };
-
-const isSameDate = (a: Date, b: Date) =>
-  a.getFullYear() === b.getFullYear() &&
-  a.getMonth() === b.getMonth() &&
-  a.getDate() === b.getDate();
-
-const isWithin = (d: Date, a: Date | null, b: Date | null) => {
-  if (!a || !b) return false;
-  const t = +new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const t1 = +new Date(a.getFullYear(), a.getMonth(), a.getDate());
-  const t2 = +new Date(b.getFullYear(), b.getMonth(), b.getDate());
-  const [min, max] = t1 <= t2 ? [t1, t2] : [t2, t1];
-  return t > min && t < max;
-};
-
-const fmtShort = (d: Date) =>
-  d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-
-function useMonthMatrix(year: number, month: number) {
-  return useMemo(() => {
-    const first = new Date(year, month, 1);
-    const startWeekday = (first.getDay() + 6) % 7; // Mon=0
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const prevMonthDays = new Date(year, month, 0).getDate();
-
-    const cells: DayCell[] = [];
-    for (let i = startWeekday - 1; i >= 0; i--) {
-      const d = prevMonthDays - i;
-      const date = new Date(year, month - 1, d);
-      cells.push({ date, currentMonth: false, isToday: isSameDate(date, new Date()) });
-    }
-    for (let d = 1; d <= daysInMonth; d++) {
-      const date = new Date(year, month, d);
-      cells.push({ date, currentMonth: true, isToday: isSameDate(date, new Date()) });
-    }
-    while (cells.length % 7 !== 0) {
-      const last = cells[cells.length - 1]?.date ?? new Date(year, month, 1);
-      const date = new Date(last);
-      date.setDate(date.getDate() + 1);
-      cells.push({ date, currentMonth: false, isToday: isSameDate(date, new Date()) });
-    }
-    return cells;
-  }, [year, month]);
+/* ------------------------ reserve panel calc helpers ----------------------- */
+function parseYMD(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
 }
+const MS_PER_NIGHT = 24 * 60 * 60 * 1000;
 
-function DateRangePopover({
-  startYMD,
-  endYMD,
-  onChange,
-  placeholder = "Select dates",
-}: {
-  startYMD: string;
-  endYMD: string;
-  onChange: (start: string, end: string) => void; // YYYY-MM-DD
-  placeholder?: string;
-}) {
-  const anchorRef = useRef<HTMLDivElement | null>(null);
-  const popRef = useRef<HTMLDivElement | null>(null);
-  const [open, setOpen] = useState(false);
-
-  const initStart = startYMD ? new Date(startYMD) : null;
-  const initEnd = endYMD ? new Date(endYMD) : null;
-  const [start, setStart] = useState<Date | null>(initStart);
-  const [end, setEnd] = useState<Date | null>(initEnd);
-
-  useEffect(() => {
-    setStart(startYMD ? new Date(startYMD) : null);
-    setEnd(endYMD ? new Date(endYMD) : null);
-  }, [startYMD, endYMD]);
-
-  const now = new Date();
-  const [viewY, setViewY] = useState((start ?? now).getFullYear());
-  const [viewM, setViewM] = useState((start ?? now).getMonth());
-
-  const cells = useMonthMatrix(viewY, viewM);
-  const monthName = (y: number, m: number) =>
-    new Date(y, m, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
-
-  const label =
-    start && end ? `${fmtShort(start)} — ${fmtShort(end)}` : start ? `${fmtShort(start)} — …` : "";
-
-  const onPrev = () => {
-    const m = viewM - 1;
-    if (m < 0) {
-      setViewM(11);
-      setViewY((y) => y - 1);
-    } else setViewM(m);
-  };
-  const onNext = () => {
-    const m = viewM + 1;
-    if (m > 11) {
-      setViewM(0);
-      setViewY((y) => y + 1);
-    } else setViewM(m);
-  };
-
-  const onPick = (d: Date) => {
-    if (!start || (start && end)) {
-      setStart(d);
-      setEnd(null);
-    } else {
-      const newStart = start;
-      const newEnd = d;
-      setEnd(d);
-      setTimeout(() => {
-        onChange(fmtDateYMD(newStart), fmtDateYMD(newEnd));
-        setOpen(false);
-      }, 80);
-    }
-  };
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (!open) return;
-      const t = e.target as Node;
-      if (
-        popRef.current &&
-        !popRef.current.contains(t) &&
-        anchorRef.current &&
-        !anchorRef.current.contains(t)
-      ) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const selected = (d: Date) =>
-    (start && isSameDate(d, start)) || (end && isSameDate(d, end));
-  const inRange = (d: Date) => isWithin(d, start, end);
-
-  return (
-    <div ref={anchorRef} className="relative">
-      <button
-        type="button"
-        className="h-10 w-full rounded-xl px-3 text-left text-sm border border-white/15 bg-white/5 text-white/90 hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-red-600/60"
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-      >
-        {label || placeholder}
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            ref={popRef}
-            initial={{ opacity: 0, y: 8, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 240, damping: 20 }}
-            className="absolute z-50 mt-2 w-[320px] overflow-hidden rounded-2xl border border-white/12 bg[rgba(0,0,0,0.7)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,.45)]"
-            role="dialog"
-          >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.06]">
-              <button
-                onClick={onPrev}
-                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
-                aria-label="Previous month"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-              <div className="text-sm font-semibold">{monthName(viewY, viewM)}</div>
-              <button
-                onClick={onNext}
-                className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/10 text-white hover:bg-white/20"
-                aria-label="Next month"
-              >
-                <ChevronRight className="size-4" />
-              </button>
-            </div>
-
-            <div className="px-3 py-2">
-              <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-white/60">
-                {dow.map((d) => (
-                  <div key={d} className="py-1">{d}</div>
-                ))}
-              </div>
-              <div className="grid grid-cols-7 gap-1">
-                {cells.map(({ date, currentMonth, isToday }, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => onPick(date)}
-                    className={[
-                      "relative h-10 rounded-lg text-sm",
-                      "border border-white/10",
-                      currentMonth ? "text-white/90" : "text-white/40",
-                      "bg-white/5 hover:bg-white/10",
-                      selected(date) ? "bg-[#E50914] text-white border-[#E50914]" : "",
-                      inRange(date) ? "bg-white/10" : "",
-                      isToday && !selected(date) ? "ring-1 ring-white/30" : "",
-                    ].join(" ")}
-                    title={date.toDateString()}
-                  >
-                    {date.getDate()}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-white/60">
-                <span>Pick start, then end</span>
-                <button
-                  className="underline hover:text-white"
-                  onClick={() => { setStart(null); setEnd(null); onChange("", ""); }}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/* =============================== PAGE ================================= */
+/* ================================== PAGE ================================== */
 export default function HotelDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
   const navigate = useNavigate();
 
-  const [me, setMe] = useState<{ id?: string | null; email?: string | null; firstName?: string | null; lastName?: string | null } | null>(null);
-
+  // hotel data
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
 
-  const today = new Date();
-  const [checkIn, setCheckIn] = useState<string>(fmtDateYMD(plusDays(today, 1)));
-  const [checkOut, setCheckOut] = useState<string>(fmtDateYMD(plusDays(today, 3)));
-  const [guests, setGuests] = useState<number>(2);
+  // reserve panel
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [guests, setGuests] = useState(2);
 
-  const [busy] = useState(false);
-  const [reserveMsg, setReserveMsg] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const abortRef = useRef<AbortController | null>(null);
-
-  const ci = useMemo(() => (checkIn ? new Date(checkIn) : null), [checkIn]);
-  const co = useMemo(() => (checkOut ? new Date(checkOut) : null), [checkOut]);
-  const datesValid = useMemo(() => !!(ci && co && +co > +ci), [ci, co]);
-
-  // Reviews
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [revLoading, setRevLoading] = useState(true);
-  const [revErr, setRevErr] = useState<string | null>(null);
-
-  // New review
+  // auth + review form
+  const [me, setMe] = useState<{ id?: string | null; email?: string | null } | null>(null);
   const [rating, setRating] = useState(5);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formMsg, setFormMsg] = useState<string | null>(null);
 
+  // reviews
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [revLoading, setRevLoading] = useState(true);
+  const [revErr, setRevErr] = useState<string | null>(null);
+
+  // fetch user (for reviews auth headers)
   useEffect(() => {
     (async () => {
       try {
         const m = await getMe();
-        setMe(m);
+        setMe({ id: m.id, email: m.email });
       } catch {}
     })();
   }, []);
 
+  // fetch hotel
   useEffect(() => {
     (async () => {
-      if (!id) {
-        setErr("Missing hotel id");
-        setLoading(false);
-        return;
-      }
-
-      abortRef.current?.abort();
-      const ac = new AbortController();
-      abortRef.current = ac;
-
+      setLoading(true);
       try {
-        const r = await fetch(`/api/hotels/${encodeURIComponent(id)}`, {
-          credentials: "include",
-          signal: ac.signal,
-        });
-        const ct = r.headers.get("content-type") || "";
-        if (!ct.includes("application/json")) {
-          const txt = await r.text().catch(() => "");
-          throw new Error(`Expected JSON but got ${ct || "unknown"}: ${txt.slice(0, 80)}`);
-        }
-        if (!r.ok) {
-          const j = await r.json().catch(() => null);
-          throw new Error(j?.error || `Failed to load (HTTP ${r.status})`);
-        }
+        const r = await fetch(`/api/hotels/${id}`, { credentials: "include" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data: Hotel = await r.json();
         setHotel(data);
-        setErr(null);
-      } catch (e: any) {
-        setErr(e?.message || "Could not load hotel");
+      } catch {
+        setHotel(null);
       } finally {
         setLoading(false);
       }
     })();
-
-    return () => abortRef.current?.abort();
   }, [id]);
 
-  // Load reviews
+  // fetch reviews
   useEffect(() => {
     (async () => {
       if (!id) return;
@@ -408,8 +153,8 @@ export default function HotelDetail() {
       try {
         const r = await fetch(`/api/hotels/${id}/reviews`, { credentials: "include" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data: Review[] = await r.json();
-        setReviews(Array.isArray(data) ? data : []);
+        const arr: Review[] = await r.json();
+        setReviews(Array.isArray(arr) ? arr : []);
         setRevErr(null);
       } catch (e: any) {
         setRevErr(e?.message || "Failed to load reviews");
@@ -419,37 +164,22 @@ export default function HotelDetail() {
     })();
   }, [id]);
 
+  const nights = useMemo(() => {
+    if (!checkIn || !checkOut) return 0;
+    const n = Math.round((+parseYMD(checkOut) - +parseYMD(checkIn)) / MS_PER_NIGHT);
+    return Math.max(0, n);
+  }, [checkIn, checkOut]);
+
+  const subtotal = useMemo(() => {
+    if (!hotel || nights <= 0) return 0;
+    return hotel.price * nights;
+  }, [hotel, nights]);
+
   const avgRating = useMemo(() => {
     if (!reviews.length) return hotel?.rating ?? null;
     const sum = reviews.reduce((s, r) => s + (Number(r.rating) || 0), 0);
     return Math.round((sum / reviews.length) * 10) / 10;
   }, [reviews, hotel?.rating]);
-
-  const cap = hotel?.capacity ?? 10;
-
-  async function reserve() {
-    if (!hotel || !id) return;
-
-    if (!datesValid) {
-      setReserveMsg?.({ ok: false, text: "Please select a valid date range." });
-      return;
-    }
-    const totalGuests = Math.max(1, Math.min(cap, guests));
-
-    const payload = {
-      hotelId: Number(id),
-      name: hotel.name,
-      city: hotel.city,
-      image: hotel.images?.[0]?.url || "/images/featured_hotel.avif",
-      price: hotel.price, // nightly
-      checkIn,
-      checkOut,
-      guests: totalGuests,
-    };
-
-    try { sessionStorage.setItem("rr_checkout", JSON.stringify(payload)); } catch {}
-    navigate("/checkout", { state: payload });
-  }
 
   async function submitReview() {
     try {
@@ -459,6 +189,7 @@ export default function HotelDetail() {
 
       setSubmitting(true);
       setFormMsg(null);
+
       const r = await fetch(`/api/hotels/${id}/reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
@@ -483,275 +214,256 @@ export default function HotelDetail() {
     }
   }
 
-  /* --------------------------- UI -------------------------- */
+  function reserve() {
+    if (!hotel) return;
+    if (!checkIn || !checkOut || nights <= 0) {
+      alert("Please select valid check-in and check-out dates.");
+      return;
+    }
+    // pass data to Checkout like your existing flow
+    const image = hotel.images?.[0]?.url || "/images/featured_hotel.avif";
+    sessionStorage.setItem(
+      "rr_checkout",
+      JSON.stringify({
+        hotelId: hotel.id,
+        name: hotel.name,
+        city: hotel.city,
+        image,
+        price: hotel.price,
+        checkIn,
+        checkOut,
+        guests,
+      })
+    );
+    navigate("/checkout", {
+      state: {
+        hotelId: hotel.id,
+        name: hotel.name,
+        city: hotel.city,
+        image,
+        price: hotel.price,
+        checkIn,
+        checkOut,
+        guests,
+      },
+    });
+  }
+
+  if (loading) {
+    return <div className="min-h-screen bg-black text-white grid place-items-center">Loading…</div>;
+  }
+  if (!hotel) {
+    return <div className="min-h-screen bg-black text-white grid place-items-center">Hotel not found</div>;
+  }
+
+  const img = hotel.images?.[0]?.url || "/images/featured_hotel.avif";
+
   return (
     <div className="min-h-screen bg-black text-white">
+      {/* Fixed Home button */}
       <button
-        onClick={() => navigate(-1)}
-        className="fixed top-5 left-5 z-50 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm 
-        font-semibold bg-white/10 border border-white/15 text-white hover:bg-white/20"
+        onClick={() => navigate("/home")}
+        className="fixed left-5 top-5 z-[9999] inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
+        aria-label="Back to home"
+        title="Back to home"
       >
-        <ChevronLeft className="h-4 w-4" /> Back
+        <Home className="h-4 w-4" />
+        Home
       </button>
 
-      {loading && (
-        <div className="mx-auto max-w-5xl p-6">
-          <div className="h-72 w-full rounded-2xl bg-white/5 border border-white/10 animate-pulse mb-6" />
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-40 rounded-xl bg-white/5 border border-white/10 animate-pulse" />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!loading && err && (
-        <div className="max-w-3xl mx-auto p-6">
-          <div className="rounded-2xl border border-white/15 bg-white/5 p-6">
-            <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
-            <p className="text-white/80 mb-4">{err}</p>
-            <button
-              onClick={() => navigate("/home")}
-              className="rounded-xl bg-[#E50914] px-5 py-2 font-semibold hover:brightness-110"
-            >
-              Go Home
-            </button>
-          </div>
-        </div>
-      )}
-
-      {!loading && !err && hotel && (
-        <>
-          {/* HERO */}
-          <div className="relative mx-auto max-w-5xl">
+      <div className="mx-auto max-w-5xl p-6 grid grid-cols-1 gap-6 md:grid-cols-[2fr_1fr]">
+        {/* LEFT: Hotel details + reviews */}
+        <article className="rounded-3xl border border-white/10 bg-white/5 p-4">
+          <div className="relative h-72 w-full overflow-hidden rounded-2xl">
             <img
-              src={hotel.images?.[0]?.url || "/images/featured_hotel.avif"}
+              src={img}
               alt={hotel.images?.[0]?.alt ?? hotel.name}
-              className="h-72 w-full rounded-2xl object-cover"
+              className="h-full w-full object-cover"
+              onError={(e) => ((e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg")}
             />
-            <div className="absolute bottom-3 left-3 rounded-full bg-black/60 px-3 py-1 text-sm">
-              <MapPin className="mr-1 inline h-4 w-4" /> {hotel.city}
-            </div>
           </div>
 
-          {/* CONTENT */}
-          <div className="mx-auto max-w-5xl p-6 space-y-10">
-            {/* Header row */}
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h1 className="text-3xl font-bold">{hotel.name}</h1>
-                <div className="mt-1 flex items-center gap-2 text-sm text-white/80">
-                  {avgRating != null && <Stars value={avgRating} />}
-                  <span>{avgRating != null ? `${avgRating.toFixed(1)}★` : (hotel.rating ?? "—")}</span>
-                  <span>• Capacity {hotel.capacity}</span>
+          <h1 className="mt-4 text-2xl font-extrabold">{hotel.name}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-white/80 text-sm">
+            <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" /> {hotel.city}</span>
+            <span className="inline-flex items-center gap-1">
+              {avgRating != null ? (
+                <>
+                  <Stars value={avgRating} />
+                  <span className="ml-1">{avgRating.toFixed(1)}</span>
+                </>
+              ) : (
+                <>No rating yet</>
+              )}
+            </span>
+          </div>
+
+          {hotel.description && <p className="mt-4 text-white/85">{hotel.description}</p>}
+
+          {/* REVIEWS */}
+          <section className="mt-8">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-2xl font-semibold">Reviews</h2>
+              {avgRating != null && (
+                <div className="text-sm text-white/80">
+                  <Stars value={avgRating} /> <span className="ml-2">{avgRating.toFixed(1)} / 5 • {reviews.length}</span>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold">${hotel.price}</div>
-                <div className="text-xs text-white/60">per night</div>
-              </div>
+              )}
             </div>
 
-            {/* Reserve panel */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-5 md:items-end">
-                <div className="md:col-span-2">
-                  <div className="mb-1 text-sm text-white/80">Dates</div>
-                  <DateRangePopover
-                    startYMD={checkIn}
-                    endYMD={checkOut}
-                    onChange={(s, e) => {
-                      setCheckIn(s);
-                      setCheckOut(e);
-                    }}
-                    placeholder="Select dates"
-                  />
-                </div>
-
-                <label className="text-sm">
-                  <span className="mb-1 block text-white/80">Guests (max {hotel.capacity})</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setGuests((g) => Math.max(1, g - 1))}
-                      className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white text-black hover:bg-white/90"
-                      aria-label="Decrease guests"
-                    >
-                      <Minus className="size-4" />
-                    </button>
-
-                    <div className="w-8 text-center text-sm tabular-nums">{guests}</div>
-
-                    <button
-                      type="button"
-                      onClick={() => setGuests((g) => Math.min(hotel.capacity, g + 1))}
-                      className="grid size-8 place-items-center rounded-lg border border-white/12 bg-white text-black hover:bg-white/90"
-                      aria-label="Increase guests"
-                    >
-                      <Plus className="size-4" />
-                    </button>
-                  </div>
-                </label>
-
-                <div className="md:col-span-2">
+            {/* Write review */}
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <div className="mb-2 text-sm text-white/80">Write a review</div>
+              <div className="mb-3 flex items-center gap-2">
+                {[1, 2, 3, 4, 5].map((n) => (
                   <button
-                    onClick={reserve}
-                    disabled={busy}
-                    className="h-10 w-full rounded-xl bg-[#E50914] text-sm font-semibold hover:brightness-110 disabled:opacity-60"
+                    key={n}
+                    type="button"
+                    onClick={() => setRating(n)}
+                    title={`${n} star${n > 1 ? "s" : ""}`}
+                    className="hover:scale-105 transition"
                   >
-                    {busy ? "Reserving…" : "Reserve Now"}
-                  </button>
-                  {reserveMsg && (
-                    <div
-                      className={`mt-2 text-sm ${reserveMsg.ok ? "text-green-400" : "text-red-400"}`}
-                    >
-                      {reserveMsg.text}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Gallery */}
-            {hotel.images?.length > 1 && (
-              <div>
-                <h2 className="mb-4 text-2xl font-semibold">Gallery</h2>
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-                  {hotel.images.slice(1).map((img, i) => (
-                    <motion.img
-                      key={i}
-                      src={img.url}
-                      alt={img.alt ?? hotel.name}
-                      className="h-48 w-full rounded-xl object-cover"
-                      whileHover={{ scale: 1.04 }}
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg";
-                      }}
+                    <Star
+                      className="h-6 w-6"
+                      stroke="currentColor"
+                      fill={n <= rating ? "currentColor" : "none"}
                     />
-                  ))}
-                </div>
+                  </button>
+                ))}
+                <span className="text-sm text-white/70">{rating} / 5</span>
               </div>
-            )}
-
-            {/* Overview */}
-            <div>
-              <h2 className="mb-2 text-2xl font-semibold">Overview</h2>
-              <p className="text-white/80">
-                A modern stay in {hotel.city}, rated {avgRating != null ? `${avgRating.toFixed(1)}★` : `${hotel.rating ?? "—"}★`} and starting at ${hotel.price}/night,
-                awaits travelers looking for more than just a room. Perfect for a cinematic escape with RedRoute’s
-                signature glow, feather-light interactions, and ultra-fast booking.
-                <br />
-                <br />
-                Wake up to skyline views, unwind in a lobby that hums with style, and head out to
-                explore local food, music, and culture — all a stone’s throw away. Expect streaming-fast Wi-Fi,
-                generous beds, rain showers, and a breakfast spread that just hits.
-                <br />
-                <br />
-                Located in the heart of {hotel.city}, you’ll be steps from cultural landmarks, buzzing nightlife, and
-                hidden gems known only to locals. Whether you’re planning a romantic weekend, an adventure with friends,
-                or a solo city break, the combination of attentive service, world-class amenities, and effortless
-                RedRoute booking makes this hotel the perfect base for memories that linger long after checkout.
-              </p>
+              <input
+                className="mb-2 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                placeholder="Title (optional)"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              <textarea
+                className="mb-3 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                placeholder="Share your experience…"
+                rows={3}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+              />
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-white/60">
+                  Be kind and constructive. One review per account.
+                </div>
+                <button
+                  disabled={submitting}
+                  onClick={submitReview}
+                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold bg-[#E50914] hover:brightness-110 disabled:opacity-60"
+                >
+                  <Send className="h-4 w-4" /> {submitting ? "Posting…" : "Post"}
+                </button>
+              </div>
+              {formMsg && <div className="mt-2 text-sm text-white/80">{formMsg}</div>}
             </div>
 
-            {/* REVIEWS */}
-            <section>
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-2xl font-semibold">Reviews</h2>
-                {avgRating != null && (
-                  <div className="text-sm text-white/80">
-                    <Stars value={avgRating} /> <span className="ml-2">{avgRating.toFixed(1)} / 5 • {reviews.length}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Write review */}
-              <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                <div className="mb-2 text-sm text-white/80">Write a review</div>
-                <div className="mb-3 flex items-center gap-2">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setRating(n)}
-                      title={`${n} star${n > 1 ? "s" : ""}`}
-                      className="hover:scale-105 transition"
-                    >
-                      <Star
-                        className="h-6 w-6"
-                        stroke="currentColor"
-                        fill={n <= rating ? "currentColor" : "none"}
-                      />
-                    </button>
-                  ))}
-                  <span className="text-sm text-white/70">{rating} / 5</span>
-                </div>
-                <input
-                  className="mb-2 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
-                  placeholder="Title (optional)"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                />
-                <textarea
-                  className="mb-3 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
-                  placeholder="Share your experience…"
-                  rows={3}
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                />
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-white/60">
-                    Be kind and constructive. One review per account.
-                  </div>
-                  <button
-                    disabled={submitting}
-                    onClick={submitReview}
-                    className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold bg-[#E50914] hover:brightness-110 disabled:opacity-60"
-                  >
-                    <Send className="h-4 w-4" /> {submitting ? "Posting…" : "Post"}
-                  </button>
-                </div>
-                {formMsg && <div className="mt-2 text-sm text-white/80">{formMsg}</div>}
-              </div>
-
-              {/* List */}
-              <div className="mt-4 space-y-3">
-                {revLoading && <div className="text-white/70">Loading reviews…</div>}
-                {!revLoading && revErr && <div className="text-red-400">{revErr}</div>}
-                {!revLoading && !revErr && reviews.length === 0 && (
-                  <div className="text-white/70">No reviews yet. Be the first!</div>
-                )}
-                {!revLoading && !revErr && reviews.map((r) => {
-                  const name =
-                    (r.user?.firstName || r.user?.lastName)
-                      ? [r.user?.firstName, r.user?.lastName].filter(Boolean).join(" ")
-                      : (r.user?.email || "Guest");
-                  return (
-                    <div key={r.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-xs font-semibold">
-                          {initials(name, r.user?.email)}
+            {/* List */}
+            <div className="mt-4 space-y-3">
+              {revLoading && <div className="text-white/70">Loading reviews…</div>}
+              {!revLoading && revErr && <div className="text-red-400">{revErr}</div>}
+              {!revLoading && !revErr && reviews.length === 0 && (
+                <div className="text-white/70">No reviews yet. Be the first!</div>
+              )}
+              {!revLoading && !revErr && reviews.map((r) => {
+                const name =
+                  (r.user?.firstName || r.user?.lastName)
+                    ? [r.user?.firstName, r.user?.lastName].filter(Boolean).join(" ")
+                    : (r.user?.email || "Guest");
+                return (
+                  <div key={r.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-xs font-semibold">
+                        {initials(name, r.user?.email)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-semibold">{name}</div>
+                          <div className="text-xs text-white/60">{fmtDate(r.createdAt)}</div>
                         </div>
-                        <div className="flex-1">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="font-semibold">{name}</div>
-                            <div className="text-xs text-white/60">{fmtDate(r.createdAt)}</div>
-                          </div>
-                          <div className="mt-1 flex items-center gap-2 text-sm">
-                            <Stars value={r.rating} />
-                            {r.title && <span className="text-white/80 font-medium">• {r.title}</span>}
-                          </div>
-                          <p className="mt-2 text-white/85 whitespace-pre-wrap">{r.body}</p>
+                        <div className="mt-1 flex items-center gap-2 text-sm">
+                          <Stars value={r.rating} />
+                          {r.title && <span className="text-white/80 font-medium">• {r.title}</span>}
                         </div>
+                        <p className="mt-2 text-white/85 whitespace-pre-wrap">{r.body}</p>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </section>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </article>
+
+        {/* RIGHT: Reserve panel */}
+        <aside className="rounded-3xl border border-white/10 bg-white/5 p-4 h-fit">
+          <div className="text-lg font-semibold mb-3">Reserve</div>
+
+          <div className="mb-2 text-sm text-white/80">Dates</div>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="date"
+              className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+              value={checkIn}
+              onChange={(e) => setCheckIn(e.target.value)}
+              aria-label="Check-in date"
+            />
+            <input
+              type="date"
+              className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+              value={checkOut}
+              onChange={(e) => setCheckOut(e.target.value)}
+              aria-label="Check-out date"
+            />
           </div>
-        </>
-      )}
+
+          <div className="mt-4 text-sm text-white/80 mb-2">Guests</div>
+          <div className="mb-4 inline-flex items-center gap-2">
+            <button
+              onClick={() => setGuests((g) => Math.max(1, g - 1))}
+              disabled={guests <= 1}
+              className="grid size-9 place-items-center rounded-xl border border-white/15 bg-white/10 hover:bg-white/20 disabled:opacity-50"
+              aria-label="Decrease guests"
+            >
+              <Minus className="h-4 w-4" />
+            </button>
+            <div className="w-12 text-center text-base tabular-nums">{guests}</div>
+            <button
+              onClick={() => setGuests((g) => Math.min(10, g + 1))}
+              className="grid size-9 place-items-center rounded-xl border border-white/15 bg-white/10 hover:bg-white/20"
+              aria-label="Increase guests"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mt-2 flex items-center justify-between text-sm">
+            <span>Price</span>
+            <span>${hotel.price.toLocaleString()} / night</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-sm">
+            <span>Nights</span>
+            <span>{nights || "—"}</span>
+          </div>
+          <div className="mt-3 border-t border-white/10 pt-3 flex items-center justify-between">
+            <span className="text-base font-semibold">Total</span>
+            <span className="text-lg font-bold">${subtotal.toLocaleString()}</span>
+          </div>
+
+          <button
+            onClick={reserve}
+            className="mt-4 h-11 w-full rounded-xl font-semibold hover:brightness-110 disabled:opacity-60"
+            style={{ background: "#E50914" }}
+          >
+            Continue to checkout
+          </button>
+          <div className="mt-2 text-xs text-white/60">
+            By continuing, you agree to our Terms and Cancellation Policy.
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

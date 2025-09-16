@@ -1,18 +1,18 @@
-// src/EventDetail.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Star, Calendar, MapPin, ChevronLeft } from "lucide-react";
+import { CalendarDays, MapPin, Minus, Plus, CheckCircle2, ChevronLeft, Home, Star, Send } from "lucide-react";
+import confetti from "canvas-confetti";
 
-/* ----------------- small helpers ----------------- */
+/* ------------ tiny auth helper ------------ */
 async function getMe() {
   const r = await fetch("/api/auth/me", { credentials: "include" });
-  if (!r.ok) return { id: null, email: null, firstName: null, lastName: null };
-  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error("Not authenticated");
+  const me = await r.json().catch(() => ({}));
   return {
-    id: j?.user?.id ?? j?.id ?? null,
-    email: j?.user?.email ?? j?.email ?? null,
-    firstName: j?.user?.firstName ?? j?.firstName ?? null,
-    lastName: j?.user?.lastName ?? j?.lastName ?? null,
+    id: me?.user?.id ?? me?.id ?? null,
+    email: me?.user?.email ?? me?.email ?? null,
+    firstName: me?.user?.firstName ?? me?.firstName ?? null,
+    lastName: me?.user?.lastName ?? me?.lastName ?? null,
   };
 }
 function authHeadersFrom(me: { id?: string | null; email?: string | null }) {
@@ -21,343 +21,545 @@ function authHeadersFrom(me: { id?: string | null; email?: string | null }) {
   if (me.email) h["x-user-email"] = String(me.email);
   return h;
 }
-async function safeJson(r: Response) {
-  const ct = (r.headers.get("content-type") || "").toLowerCase();
-  if (ct.includes("application/json")) return r.json();
-  const text = await r.text();
-  try { return JSON.parse(text); } catch { return null; }
-}
 
-type EventType = {
+/* ------------ types ------------ */
+type EventItem = {
   id: number;
   name: string;
   description: string;
   location: string;
   startsAt: string; // ISO
   price: number;
-  capacity: number;
   imageUrl: string;
   imageAlt?: string | null;
 };
+type CreatedEventBooking = {
+  id: number;
+  eventId: number;
+  qty: number;
+  totalCost: number;
+  contactEmail?: string | null;
+};
 
-const fmtWhen = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, {
+/* Reviews */
+type Review = {
+  id: number;
+  userId: string;
+  rating: number;
+  title?: string | null;
+  body: string;
+  createdAt: string;
+  user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
+};
+
+/* ------------ utils ------------ */
+function fmtWhen(iso?: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
     weekday: "short",
     month: "short",
     day: "2-digit",
     hour: "numeric",
     minute: "2-digit",
   });
-
-/* ----------------- reviews types ----------------- */
-type PublicUser = { firstName: string | null; lastName: string | null; email: string | null } | null;
-type Review = {
-  id: number;
-  userId: string;
-  rating: number;
-  title: string | null;
-  body: string;
-  createdAt: string;
-  user: PublicUser;
-};
-
-/* ----------------- star ui ----------------- */
+}
+function fmtDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+function initials(name?: string | null, email?: string | null) {
+  const n = (name || "").trim();
+  if (n) {
+    const parts = n.split(/\s+/);
+    return (parts[0][0] || "") + (parts[1]?.[0] || "");
+  }
+  const e = (email || "").trim();
+  return e ? e[0]?.toUpperCase() || "U" : "U";
+}
 function Stars({ value, size = 16 }: { value: number; size?: number }) {
-  const full = Math.round(value);
+  const full = Math.floor(value);
+  const hasHalf = value - full >= 0.5;
+  const arr = [0, 1, 2, 3, 4];
   return (
-    <div className="inline-flex items-center gap-0.5">
-      {Array.from({ length: 5 }).map((_, i) => (
+    <div className="inline-flex items-center gap-0.5" title={`${value.toFixed(1)} / 5`}>
+      {arr.map((i) => (
         <Star
           key={i}
-          className="shrink-0"
+          className="opacity-90"
           width={size}
           height={size}
-          {...(i < full ? { fill: "currentColor" } : {})}
+          stroke="currentColor"
+          fill={i < full ? "currentColor" : hasHalf && i === full ? "url(#half)" : "none"}
         />
       ))}
+      <svg width="0" height="0">
+        <defs>
+          <linearGradient id="half">
+            <stop offset="50%" stopColor="currentColor" />
+            <stop offset="50%" stopColor="transparent" />
+          </linearGradient>
+        </defs>
+      </svg>
     </div>
   );
 }
 
-function StarPicker({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <div className="inline-flex items-center gap-1">
-      {Array.from({ length: 5 }).map((_, i) => {
-        const n = i + 1;
-        const active = n <= value;
-        return (
-          <button
-            key={n}
-            type="button"
-            onClick={() => onChange(n)}
-            className={`p-1 rounded ${active ? "text-yellow-400" : "text-white/40"} hover:text-yellow-300`}
-            aria-label={`Rate ${n} star${n > 1 ? "s" : ""}`}
-          >
-            <Star className={active ? "fill-current" : ""} />
-          </button>
-        );
-      })}
-    </div>
-  );
+/* ------------ confetti hook (50% intensity, evenly spread) ------------ */
+function useCelebration() {
+  const rafRef = useRef<number | null>(null);
+  const flipRef = useRef(0);
+
+  function stop() {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }
+
+  function start(durationMs = 2800) {
+    stop();
+    const base = { startVelocity: 45, ticks: 200, zIndex: 9999 };
+    const end = Date.now() + durationMs;
+
+    const run = () => {
+      const left = end - Date.now();
+      if (left <= 0) return stop();
+
+      const progress = left / durationMs;
+      const particleCount = Math.max(6, Math.floor(35 * progress));
+      const flip = (flipRef.current ^= 1);
+      const rand = (a: number, b: number) => Math.random() * (b - a) + a;
+
+      if (flip) {
+        confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.05 } });
+        confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.95 } });
+        confetti({ ...base, particleCount: Math.ceil(particleCount * 0.8), spread: 110, origin: { x: rand(0.2, 0.8), y: 0 } });
+      } else {
+        confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.05 } });
+        confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.95 } });
+        confetti({ ...base, particleCount: Math.ceil(particleCount * 0.8), spread: 110, origin: { x: rand(0.2, 0.8), y: 1 } });
+      }
+
+      rafRef.current = requestAnimationFrame(run);
+    };
+
+    rafRef.current = requestAnimationFrame(run);
+  }
+
+  useEffect(() => stop, []);
+  return { start, stop };
 }
 
-/* ----------------- reusable reviews section ----------------- */
-function ReviewsSection({ eventId }: { eventId: number }) {
-  const [me, setMe] = useState<{ id: string | null; email: string | null }>({ id: null, email: null });
+/* ------------ page ------------ */
+export default function EventDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const celebration = useCelebration();
+
+  const [me, setMe] = useState<{ id?: string | null; email?: string | null; firstName?: string | null; lastName?: string | null } | null>(null);
+  const [ev, setEv] = useState<EventItem | null>(null);
   const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<Review[]>([]);
-  const [err, setErr] = useState<string | null>(null);
+  const [qty, setQty] = useState(1);
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
 
-  // form
-  const myExisting = useMemo(
-    () => items.find((r) => r.userId === me.id) || null,
-    [items, me.id]
-  );
-  const [rating, setRating] = useState<number>(myExisting?.rating || 5);
-  const [title, setTitle] = useState<string>(myExisting?.title || "");
-  const [body, setBody] = useState<string>(myExisting?.body || "");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [booking, setBooking] = useState<CreatedEventBooking | null>(null);
+
+  // Reviews state
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [revLoading, setRevLoading] = useState(true);
+  const [revErr, setRevErr] = useState<string | null>(null);
+
+  // New review form
+  const [rating, setRating] = useState(5);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [submitMsg, setSubmitMsg] = useState<string | null>(null);
-
-  const avg = useMemo(() => {
-    if (items.length === 0) return null;
-    const s = items.reduce((a, b) => a + (b.rating || 0), 0);
-    return Math.round((s / items.length) * 10) / 10;
-  }, [items]);
+  const [formMsg, setFormMsg] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        setLoading(true);
-        setErr(null);
-        const auth = await getMe();
-        setMe({ id: auth.id, email: auth.email });
+        const m = await getMe();
+        setMe(m);
+        const full = [m.firstName, m.lastName].filter(Boolean).join(" ").trim();
+        setContactName(full || (m.email ? m.email.split("@")[0] : ""));
+        setContactEmail(m.email || "");
+      } catch {}
+    })();
+  }, []);
 
-        const r = await fetch(`/api/events/${eventId}/reviews`, { credentials: "include" });
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/events/${id}`, { credentials: "include" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data: Review[] = await safeJson(r);
-        setItems(Array.isArray(data) ? data : []);
-      } catch (e: any) {
-        setErr(e?.message || "Failed to load reviews");
+        const e: EventItem = await r.json();
+        setEv(e);
+      } catch {
+        setEv(null);
       } finally {
         setLoading(false);
       }
     })();
-  }, [eventId]);
+  }, [id]);
 
+  // Load reviews
   useEffect(() => {
-    if (myExisting) {
-      setRating(myExisting.rating);
-      setTitle(myExisting.title || "");
-      setBody(myExisting.body);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myExisting?.id]);
+    (async () => {
+      if (!id) return;
+      setRevLoading(true);
+      try {
+        const r = await fetch(`/api/events/${id}/reviews`, { credentials: "include" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data: Review[] = await r.json();
+        setReviews(Array.isArray(data) ? data : []);
+        setRevErr(null);
+      } catch (e: any) {
+        setRevErr(e?.message || "Failed to load reviews");
+      } finally {
+        setRevLoading(false);
+      }
+    })();
+  }, [id]);
 
-  async function submit() {
+  const avgRating = useMemo(() => {
+    if (!reviews.length) return null;
+    const sum = reviews.reduce((s, r) => s + (Number(r.rating) || 0), 0);
+    return Math.round((sum / reviews.length) * 10) / 10;
+  }, [reviews]);
+
+  const subtotal = useMemo(() => (!ev ? 0 : ev.price * qty), [ev, qty]);
+  const valid = !!ev && qty > 0;
+
+  async function payAndBook() {
     try {
-      setSubmitting(true);
-      setSubmitMsg(null);
-      if (!me.id && !me.email) throw new Error("Please log in to submit a review.");
+      setMsg(null);
+      if (!valid) throw new Error("Missing details.");
+      if (!me) throw new Error("Not authenticated.");
+      setBusy(true);
 
-      const r = await fetch(`/api/events/${eventId}/reviews`, {
+      const r = await fetch("/api/event-bookings", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeadersFrom(me),
-        },
+        headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
         credentials: "include",
         body: JSON.stringify({
-          rating,
-          title: title.trim() || null,
-          body: body.trim(),
+          eventId: ev!.id,
+          qty,
+          contactName: contactName || null,
+          contactEmail: contactEmail || null,
         }),
       });
-      const payload = await safeJson(r);
+
+      const raw = await r.text();
+      const payload = raw ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : null;
       if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
 
-      const saved: Review | null = payload?.review ?? null;
-      if (saved) {
-        setItems((prev) => {
-          const i = prev.findIndex((x) => x.id === saved.id || x.userId === saved.userId);
-          if (i >= 0) {
-            const copy = prev.slice();
-            copy[i] = saved;
-            return copy;
-          }
-          return [saved, ...prev];
-        });
-      } else {
-        const rr = await fetch(`/api/events/${eventId}/reviews`, { credentials: "include" });
-        if (rr.ok) setItems((await safeJson(rr)) || []);
-      }
-      setSubmitMsg("Saved! Thank you for your review.");
+      setBooking(payload?.booking ?? null);
+      setConfirmed(true);
+      setMsg({ ok: true, text: "Tickets confirmed!" });
+
+      // fire confetti on success (from all 4 sides, reduced intensity)
+      celebration.start(3000);
     } catch (e: any) {
-      setSubmitMsg(e?.message || "Could not save review.");
+      setMsg({ ok: false, text: e?.message || "Payment failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitReview() {
+    try {
+      if (!me) throw new Error("Please sign in to post a review.");
+      if (!id) throw new Error("Missing event id.");
+      if (!rating || !body.trim()) throw new Error("Please add a rating and some text.");
+
+      setSubmitting(true);
+      setFormMsg(null);
+      const r = await fetch(`/api/events/${id}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
+        credentials: "include",
+        body: JSON.stringify({ rating, title: title || null, body }),
+      });
+
+      const isJson = (r.headers.get("content-type") || "").includes("application/json");
+      const payload = isJson ? await r.json().catch(() => null) : null;
+      if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
+
+      const created: Review = payload?.review ?? payload;
+      // optimistic refresh
+      setReviews((prev) => [created, ...prev]);
+      setTitle("");
+      setBody("");
+      setRating(5);
+      setFormMsg("Thanks! Your review was posted.");
+    } catch (e: any) {
+      setFormMsg(e?.message || "Could not post review.");
     } finally {
       setSubmitting(false);
     }
   }
 
-  return (
-    <section className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-5 text-white">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-xl font-semibold">Attendee Reviews</h3>
-        <div className="text-sm text-white/80">
-          {avg != null ? (
-            <span className="inline-flex items-center gap-2">
-              <Stars value={avg} />
-              <span>{avg} · {items.length} review{items.length === 1 ? "" : "s"}</span>
-            </span>
-          ) : (
-            <span>No reviews yet</span>
-          )}
-        </div>
-      </div>
-
-      {/* list */}
-      {loading ? (
-        <div className="text-white/70">Loading reviews…</div>
-      ) : err ? (
-        <div className="text-red-400">{err}</div>
-      ) : items.length === 0 ? (
-        <div className="text-white/70">Be the first to leave a review.</div>
-      ) : (
-        <ul className="space-y-4">
-          {items.map((r) => (
-            <li key={r.id} className="rounded-xl border border-white/10 bg-black/30 p-4">
-              <div className="flex items-center justify-between">
-                <div className="font-medium">
-                  {r.user?.firstName || r.user?.email?.split("@")[0] || "Guest"}
-                </div>
-                <Stars value={r.rating} />
-              </div>
-              {r.title && <div className="mt-1 text-white/90">{r.title}</div>}
-              <p className="mt-1 text-sm text-white/80 whitespace-pre-wrap">{r.body}</p>
-              <div className="mt-2 text-xs text-white/50">
-                {new Date(r.createdAt).toLocaleString()}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* form */}
-      <div className="mt-6 border-t border-white/10 pt-5">
-        <div className="mb-2 text-sm text-white/80">
-          {myExisting ? "Update your review" : "Write a review"}
-        </div>
-        <div className="flex items-center gap-3">
-          <StarPicker value={rating} onChange={setRating} />
-          <input
-            className="flex-1 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
-            placeholder="Title (optional)"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </div>
-        <textarea
-          className="mt-2 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
-          placeholder="How was the event?"
-          rows={4}
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-        />
-        <div className="mt-3 flex items-center justify-between">
-          <div className="text-xs text-white/60">
-            One review per user · You can edit it anytime
-          </div>
-          <button
-            onClick={submit}
-            disabled={submitting || body.trim().length === 0}
-            className="rounded-xl px-4 py-2 text-sm font-semibold hover:brightness-110 disabled:opacity-60"
-            style={{ background: "#E50914" }}
-          >
-            {submitting ? "Saving…" : myExisting ? "Update review" : "Post review"}
-          </button>
-        </div>
-        {submitMsg && (
-          <div className="mt-2 text-sm text-white/80">{submitMsg}</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-/* ----------------- page ----------------- */
-export default function EventDetail() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const [ev, setEv] = useState<EventType | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
-  const eventId = Number(id);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const r = await fetch(`/api/events/${eventId}`, { credentials: "include" });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data: EventType = await safeJson(r);
-        setEv(data);
-      } catch (e: any) {
-        setErr(e?.message || "Failed to load event");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [eventId]);
+  if (loading) {
+    return <div className="min-h-screen bg-black text-white grid place-items-center">Loading…</div>;
+  }
+  if (!ev) {
+    return <div className="min-h-screen bg-black text-white grid place-items-center">Event not found</div>;
+  }
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="mx-auto max-w-5xl p-6">
-        <button
-          onClick={() => navigate(-1)}
-          className="mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
-        >
-          <ChevronLeft className="h-4 w-4" /> Back
-        </button>
+      {/* Fixed Home button (always visible) */}
+      <button
+        onClick={() => navigate("/home")}
+        className="fixed left-5 top-5 z-[9999] inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/10 border border-white/15 hover:bg-white/20"
+        aria-label="Back to home"
+        title="Back to home"
+      >
+        <Home className="h-4 w-4" />
+        Home
+      </button>
 
-        {loading ? (
-          <div className="text-white/70">Loading…</div>
-        ) : err ? (
-          <div className="text-red-400">{err}</div>
-        ) : ev ? (
-          <>
-            <div className="flex flex-col gap-4 md:flex-row">
-              <img
-                className="h-56 w-full rounded-2xl object-cover md:w-80"
-                src={ev.imageUrl || "/images/fallback.jpg"}
-                alt={ev.imageAlt || ev.name}
-              />
-              <div className="flex-1">
-                <h1 className="text-2xl font-bold">{ev.name}</h1>
-                <div className="mt-1 flex items-center gap-3 text-white/80">
-                  <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{ev.location}</span>
-                  <span className="inline-flex items-center gap-1"><Calendar className="h-4 w-4" />{fmtWhen(ev.startsAt)}</span>
-                </div>
-                {ev.description && (
-                  <p className="mt-3 text-white/80 whitespace-pre-wrap">{ev.description}</p>
-                )}
-                <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 inline-flex items-baseline gap-2">
-                  <span className="text-xl font-bold">${ev.price}</span>
-                  <span className="text-sm text-white/70">per ticket</span>
+      <div className="mx-auto max-w-5xl p-6 grid grid-cols-1 gap-6 md:grid-cols-[2fr_1fr]">
+        {/* LEFT: event card + confirmation banner + reviews */}
+        <article className="rounded-3xl border border-white/10 bg-white/5 p-4">
+          <div className="relative h-72 w-full overflow-hidden rounded-2xl">
+            <img
+              src={ev.imageUrl}
+              alt={ev.imageAlt ?? ev.name}
+              className="h-full w-full object-cover"
+              onError={(e) => ((e.currentTarget as HTMLImageElement).src = "/images/fallback.jpg")}
+            />
+          </div>
+
+          <h1 className="mt-4 text-2xl font-extrabold">{ev.name}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-white/80 text-sm">
+            <span className="inline-flex items-center gap-1"><CalendarDays className="h-4 w-4" /> {fmtWhen(ev.startsAt)}</span>
+            <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" /> {ev.location}</span>
+            {avgRating != null && (
+              <span className="inline-flex items-center gap-1">
+                <Stars value={avgRating} />
+                <span className="ml-1">{avgRating.toFixed(1)} • {reviews.length} review{reviews.length === 1 ? "" : "s"}</span>
+              </span>
+            )}
+          </div>
+
+          <p className="mt-4 text-white/85">{ev.description}</p>
+
+          {confirmed && (
+            <div className="mt-5 rounded-2xl border border-green-600/30 bg-green-600/15 p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" />
+                <div>
+                  <div className="text-lg font-semibold text-green-400">Tickets confirmed!</div>
+                  <div className="text-white/85">
+                    You’re all set for <strong>{ev.name}</strong> on <strong>{fmtWhen(ev.startsAt)}</strong>.{" "}
+                    {booking?.contactEmail ? <>A confirmation email was sent to <strong>{booking.contactEmail}</strong>.</> : null}
+                  </div>
+                  <div className="mt-2 text-xs text-white/70">
+                    Reference: <span className="font-mono">{booking?.id ?? "—"}</span> • Qty: {booking?.qty ?? qty} • Paid: ${ (booking?.totalCost ?? subtotal).toLocaleString() }
+                  </div>
                 </div>
               </div>
             </div>
+          )}
 
-            {/* Reviews */}
-            <ReviewsSection eventId={eventId} />
-          </>
-        ) : null}
+          {/* REVIEWS */}
+          <section className="mt-8">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-2xl font-semibold">Reviews</h2>
+              {avgRating != null && (
+                <div className="text-sm text-white/80">
+                  <Stars value={avgRating} /> <span className="ml-2">{avgRating.toFixed(1)} / 5 • {reviews.length}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Write review */}
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <div className="mb-2 text-sm text-white/80">Write a review</div>
+              <div className="mb-3 flex items-center gap-2">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRating(n)}
+                    title={`${n} star${n > 1 ? "s" : ""}`}
+                    className="hover:scale-105 transition"
+                  >
+                    <Star
+                      className="h-6 w-6"
+                      stroke="currentColor"
+                      fill={n <= rating ? "currentColor" : "none"}
+                    />
+                  </button>
+                ))}
+                <span className="text-sm text-white/70">{rating} / 5</span>
+              </div>
+              <input
+                className="mb-2 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                placeholder="Title (optional)"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              <textarea
+                className="mb-3 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                placeholder="Share your experience…"
+                rows={3}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+              />
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-white/60">
+                  Be kind and constructive. One review per account.
+                </div>
+                <button
+                  disabled={submitting}
+                  onClick={submitReview}
+                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold bg-[#E50914] hover:brightness-110 disabled:opacity-60"
+                >
+                  <Send className="h-4 w-4" /> {submitting ? "Posting…" : "Post"}
+                </button>
+              </div>
+              {formMsg && <div className="mt-2 text-sm text-white/80">{formMsg}</div>}
+            </div>
+
+            {/* List */}
+            <div className="mt-4 space-y-3">
+              {revLoading && <div className="text-white/70">Loading reviews…</div>}
+              {!revLoading && revErr && <div className="text-red-400">{revErr}</div>}
+              {!revLoading && !revErr && reviews.length === 0 && (
+                <div className="text-white/70">No reviews yet. Be the first!</div>
+              )}
+              {!revLoading && !revErr && reviews.map((r) => {
+                const name =
+                  (r.user?.firstName || r.user?.lastName)
+                    ? [r.user?.firstName, r.user?.lastName].filter(Boolean).join(" ")
+                    : (r.user?.email || "Guest");
+                return (
+                  <div key={r.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-xs font-semibold">
+                        {initials(name, r.user?.email)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-semibold">{name}</div>
+                          <div className="text-xs text-white/60">{fmtDate(r.createdAt)}</div>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-sm">
+                          <Stars value={r.rating} />
+                          {r.title && <span className="text-white/80 font-medium">• {r.title}</span>}
+                        </div>
+                        <p className="mt-2 text-white/85 whitespace-pre-wrap">{r.body}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </article>
+
+        {/* RIGHT: purchase panel / receipt */}
+        <aside className="rounded-3xl border border-white/10 bg-white/5 p-4 h-fit">
+          {!confirmed ? (
+            <>
+              <div className="text-lg font-semibold mb-3">Get tickets</div>
+
+              <div className="mb-2 text-sm text-white/80">Contact</div>
+              <input
+                className="mb-2 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                placeholder="Contact name"
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
+              />
+              <input
+                className="mb-4 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm"
+                placeholder="Contact email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+              />
+
+              <div className="mb-2 text-sm text-white/80">Tickets</div>
+              <div className="mb-4 inline-flex items-center gap-2">
+                <button
+                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  disabled={qty <= 1}
+                  className="grid size-9 place-items-center rounded-xl border border-white/15 bg-white/10 hover:bg-white/20 disabled:opacity-50"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <div className="w-12 text-center text-base tabular-nums">{qty}</div>
+                <button
+                  onClick={() => setQty((q) => Math.min(10, q + 1))}
+                  className="grid size-9 place-items-center rounded-xl border border-white/15 bg-white/10 hover:bg-white/20"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between text-sm">
+                <span>Price</span>
+                <span>${ev.price.toLocaleString()}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-sm">
+                <span>Qty</span>
+                <span>{qty}</span>
+              </div>
+              <div className="mt-3 border-t border-white/10 pt-3 flex items-center justify-between">
+                <span className="text-base font-semibold">Total</span>
+                <span className="text-lg font-bold">${subtotal.toLocaleString()}</span>
+              </div>
+
+              {msg && (
+                <div className={`mt-3 text-sm ${msg.ok ? "text-green-400" : "text-red-400"}`}>
+                  {msg.text}
+                </div>
+              )}
+
+              <button
+                disabled={!valid || busy}
+                onClick={payAndBook}
+                className="mt-4 h-11 w-full rounded-xl font-semibold hover:brightness-110 disabled:opacity-60"
+                style={{ background: "#E50914" }}
+              >
+                {busy ? "Processing…" : "Pay & Confirm"}
+              </button>
+
+              <button
+                onClick={() => navigate(-1)}
+                className="mt-2 inline-flex items-center gap-2 text-sm text-white/80 hover:text-white"
+              >
+                <ChevronLeft className="h-4 w-4" /> Back
+              </button>
+            </>
+          ) : (
+            <div>
+              <div className="mx-auto mb-2 grid h-10 w-10 place-items-center rounded-full bg-green-500/15 text-green-400">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <div className="text-center text-lg font-semibold">Tickets confirmed</div>
+              <p className="mt-1 text-center text-sm text-white/70">
+                Enjoy the show! Your purchase details are saved below.
+              </p>
+
+              <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
+                <div className="flex items-center justify-between py-1"><span>Event</span><span className="font-medium">{ev.name}</span></div>
+                <div className="flex items-center justify-between py-1"><span>When</span><span className="font-medium">{fmtWhen(ev.startsAt)}</span></div>
+                <div className="flex items-center justify-between py-1"><span>Tickets</span><span className="font-medium">{booking?.qty ?? qty}</span></div>
+                <div className="flex items-center justify-between py-1"><span>Total paid</span><span className="font-bold">${(booking?.totalCost ?? subtotal).toLocaleString()}</span></div>
+                <div className="flex items-center justify-between py-1"><span>Reference</span><span className="font-mono">{booking?.id ?? "—"}</span></div>
+              </div>
+            </div>
+          )}
+        </aside>
       </div>
     </div>
   );
