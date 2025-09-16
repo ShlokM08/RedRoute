@@ -1,17 +1,25 @@
 // api/_lib/prisma.ts
 import { PrismaClient } from "@prisma/client";
 
-declare global {
-  // allow global `var` declarations
-  // eslint-disable-next-line no-var
-  var __prisma__: PrismaClient | undefined;
-}
+/**
+ * Reuse a single PrismaClient in dev to avoid exhausting DB connections.
+ */
+const globalForPrisma = globalThis as unknown as {
+  __prisma?: PrismaClient;
+};
 
-// Reuse the Prisma Client in development to avoid too many connections
-const prisma = global.__prisma__ ?? new PrismaClient();
+// Create or reuse the client
+export const prisma =
+  globalForPrisma.__prisma ??
+  new PrismaClient({
+    // Optional: quieter logs in prod
+    log: process.env.NODE_ENV === "development" ? ["query", "warn", "error"] : ["error"],
+  });
 
+// Cache on global in dev
 if (process.env.NODE_ENV !== "production") {
-  global.__prisma__ = prisma;
+  globalForPrisma.__prisma = prisma;
 }
 
+// Export default *and* named so both import styles work
 export default prisma;
