@@ -39,10 +39,10 @@ type Hotel = {
   city: string | null;
   address: string | null;
   price: number | null;
-  rating: number | null;
-  reviewsCount?: number | null;
-  reviews?: Review[];
-  // add any other fields you show in the card
+  rating: number | null;        // server returns avg rating here
+  reviewsCount?: number | null; // server returns count here
+  reviews?: Review[];           // included by GET /api/hotels/:id
+  // ...any other fields you already render
 };
 
 /* --------------------------------- utils ----------------------------------- */
@@ -75,6 +75,10 @@ function Stars({ value, size = 16 }: { value: number; size?: number }) {
     </div>
   );
 }
+function average(nums: number[]) {
+  if (!nums.length) return 0;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
 
 /* -------------------------------- component -------------------------------- */
 export default function HotelDetail() {
@@ -86,11 +90,11 @@ export default function HotelDetail() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // booking box (if you have it)
+  // booking box (keep your existing state/UI)
   const [nights, setNights] = useState(1);
   const [guests, setGuests] = useState(2);
 
-  // reviews state (loaded from GET /api/hotels/:id)
+  // reviews state (now hydrated from GET /api/hotels/:id)
   const [reviews, setReviews] = useState<Review[]>([]);
   const avgRating = useMemo(
     () => (hotel?.rating != null ? Number(hotel.rating) : reviews.length ? average(reviews.map(r => r.rating)) : 0),
@@ -104,21 +108,25 @@ export default function HotelDetail() {
   const [formMsg, setFormMsg] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
 
+  // Load hotel (and reviews) + current user
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         setLoading(true);
         setErr(null);
+
         const [meVal, hotelRes] = await Promise.all([
           getMe().catch(() => ({ id: null, email: null })),
           fetch(`/api/hotels/${id}`, { credentials: "include" }),
         ]);
+
         const payload = await hotelRes.json().catch(() => ({}));
         if (!hotelRes.ok) throw new Error(payload?.error || `HTTP ${hotelRes.status}`);
         if (!alive) return;
 
         setMe({ id: meVal?.id ?? null, email: meVal?.email ?? null });
+
         // hydrate hotel & reviews from the same payload
         setHotel(payload as Hotel);
         setReviews(Array.isArray(payload?.reviews) ? payload.reviews : []);
@@ -151,28 +159,24 @@ export default function HotelDetail() {
           body,
         }),
       });
+
       const payload = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
 
-      // API can return either { review, reviewsAvg, reviewsCount } or full hotel — handle both
-      const created: Review =
-        payload?.review ??
-        payload; // be permissive (your current API returns {review, reviewsAvg, reviewsCount})
+      // API may return { review, reviewsAvg, reviewsCount }
+      const created: Review = payload?.review ?? payload;
       setReviews(prev => {
-        // upsert by userId (one review per user)
+        // upsert by userId (assumes one review per user per hotel)
         const rest = prev.filter(x => x.userId !== created.userId);
         return [created, ...rest];
       });
 
-      // optionally refresh hotel rating/count
+      // update displayed average/count if provided by API
       setHotel(h =>
         h
           ? {
               ...h,
-              rating:
-                payload?.reviewsAvg != null
-                  ? Number(payload.reviewsAvg)
-                  : h.rating,
+              rating: payload?.reviewsAvg != null ? Number(payload.reviewsAvg) : h.rating,
               reviewsCount:
                 payload?.reviewsCount != null
                   ? Number(payload.reviewsCount)
@@ -193,7 +197,6 @@ export default function HotelDetail() {
   }
 
   function reserve() {
-    // whatever your flow was
     navigate(`/checkout/${id}?nights=${nights}&guests=${guests}`);
   }
 
@@ -275,11 +278,11 @@ export default function HotelDetail() {
                     onChange={(e) => setRating(Number(e.target.value))}
                     className="w-full rounded-lg bg-white/10 p-2 text-sm outline-none"
                   >
-                    {[5, 4, 3, 2, 1].map((n) => (
+                    {[1, 2, 3, 4, 5].map((n) => (
                       <option key={n} value={n}>
-                        {n} — {["Terrible", "Poor", "OK", "Good", "Great"][n - 1] ?? ""}
+                        {n}
                       </option>
-                    )).reverse()}
+                    ))}
                   </select>
                 </label>
                 <label className="flex items-center gap-2">
@@ -318,7 +321,9 @@ export default function HotelDetail() {
 
         {/* ----------------------------- right sidebar ---------------------------- */}
         <aside className="rounded-xl border border-white/10 p-4">
-          <div className="text-lg font-semibold">From {hotel.price ? `$${hotel.price}/night` : "—"}</div>
+          <div className="text-lg font-semibold">
+            From {hotel.price != null ? `$${hotel.price}/night` : "—"}
+          </div>
           <div className="mt-2 text-sm text-white/70">Flexible cancellation</div>
 
           <div className="mt-4 space-y-3">
@@ -369,10 +374,4 @@ export default function HotelDetail() {
       </div>
     </div>
   );
-}
-
-/* --------------------------------- helpers --------------------------------- */
-function average(nums: number[]) {
-  if (!nums.length) return 0;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
