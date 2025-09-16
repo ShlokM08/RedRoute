@@ -1,145 +1,129 @@
-// /api/events/[id].ts
+// api/event-bookings/index.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import prisma from "../_lib/prisma";
+import prisma from "../_lib/prisma.js";
 
-/* helpers */
-const pickUser = (u: any) =>
-  u ? { firstName: u.firstName ?? null, lastName: u.lastName ?? null, email: u.email ?? null } : null;
-
-const sanitizeRating = (n: any) => {
-  const r = Number(n);
-  if (!Number.isFinite(r)) return null;
-  if (r < 1 || r > 5) return null;
-  return Math.round(r);
+type Body = {
+  eventId?: number | string;
+  qty?: number;
+  contactName?: string | null;   // optional; derived from user if absent
+  contactEmail?: string | null;  // optional; derived from user if absent
 };
 
-async function getUserFromHeaders(req: VercelRequest) {
-  const id = (req.headers["x-user-id"] as string | undefined)?.trim() || "";
-  const email = (req.headers["x-user-email"] as string | undefined)?.trim() || "";
-
-  if (id) {
-    const u = await prisma.user.findUnique({ where: { id } });
-    if (u) return u;
-  }
-  if (email) {
-    const u = await prisma.user.findUnique({ where: { email } });
-    if (u) return u;
-  }
-  return null;
+function bad(res: VercelResponse, code: number, msg: string) {
+  return res.status(code).json({ error: msg });
 }
 
-async function readJsonBody(req: VercelRequest): Promise<any> {
-  if (req.body && typeof req.body === "object") return req.body;
-  if (typeof req.body === "string") {
-    try { return JSON.parse(req.body); } catch { return {}; }
-  }
-  return await new Promise((resolve) => {
-    let raw = "";
-    req.on("data", (c) => (raw += c));
-    req.on("end", () => {
-      try { resolve(JSON.parse(raw || "{}")); } catch { resolve({}); }
-    });
-  });
+function fallbackNameFromEmail(email?: string | null) {
+  if (!email) return null;
+  const left = email.split("@")[0] || "";
+  if (!left) return null;
+  return left
+    .replace(/[._-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map(w => w[0]?.toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const idParam = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
-  const eventId = Number(idParam);
-  if (!Number.isFinite(eventId) || eventId <= 0) {
-    return res.status(400).json({ error: "Invalid id" });
+  if (req.method !== "POST") return bad(res, 405, "Use POST");
+
+  let body: Body;
+  try {
+    body = (typeof req.body === "string" ? JSON.parse(req.body) : req.body) ?? {};
+  } catch {
+    return bad(res, 400, "Invalid JSON body");
+  }
+
+  const eventIdNum = Number(body.eventId);
+  const qty = Number(body.qty ?? 1);
+
+  if (!Number.isFinite(eventIdNum) || eventIdNum <= 0) {
+    return bad(res, 400, "eventId must be a positive number");
+  }
+  if (!Number.isFinite(qty) || qty <= 0) {
+    return bad(res, 400, "qty must be a positive number");
   }
 
   try {
-    if (req.method === "GET") {
-      const [ev, reviews, agg] = await Promise.all([
-        prisma.event.findUnique({
-          where: { id: eventId },
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            location: true,
-            startsAt: true,
-            price: true,
-            capacity: true,
-            imageUrl: true,
-            imageAlt: true,
-          },
-        }),
-        prisma.eventReview.findMany({
-          where: { eventId },
-          orderBy: { createdAt: "desc" },
-          take: 50,
-          include: { user: { select: { firstName: true, lastName: true, email: true } } },
-        }),
-        prisma.eventReview.aggregate({ where: { eventId }, _avg: { rating: true }, _count: { _all: true } }),
-      ]);
+    // identify user (same convention as hotel bookings)
+    const headerUserId =
+      typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"].trim() : null;
+    const headerEmail =
+      typeof req.headers["x-user-email"] === "string" ? req.headers["x-user-email"].trim() : null;
 
-      if (!ev) return res.status(404).json({ error: "Not found" });
+    let userId: string | null = null;
+    let userEmail: string | null = headerEmail ?? null;
+    let userFirst: string | null = null;
+    let userLast: string | null = null;
 
-      const reviewsAvg = agg._avg.rating ? Math.round(agg._avg.rating * 10) / 10 : null;
-      const reviewsCount = agg._count._all ?? 0;
-
-      return res.status(200).json({
-        ...ev,
-        reviews: reviews.map((r) => ({
-          id: r.id,
-          userId: r.userId,
-          rating: r.rating,
-          title: r.title,
-          body: r.body,
-          createdAt: r.createdAt,
-          user: pickUser(r.user),
-        })),
-        reviewsAvg,
-        reviewsCount,
+    if (headerUserId) {
+      const u = await prisma.user.findUnique({
+        where: { id: headerUserId },
+        select: { id: true, email: true, firstName: true, lastName: true },
       });
+      if (u) {
+        userId = u.id;
+        userEmail = u.email ?? userEmail;
+        userFirst = u.firstName ?? null;
+        userLast = u.lastName ?? null;
+      }
+    }
+    if (!userId) return bad(res, 401, "Not authenticated");
+
+    // load event
+    const ev = await prisma.event.findUnique({
+      where: { id: eventIdNum },
+      select: { id: true, name: true, price: true, capacity: true, startsAt: true },
+    });
+    if (!ev) return bad(res, 404, "Event not found");
+
+    // capacity check: sum of qty already reserved for this event
+    const agg = await prisma.eventBooking.aggregate({
+      where: { eventId: eventIdNum },
+      _sum: { qty: true },
+    });
+    const already = agg._sum.qty ?? 0;
+    const remaining = Math.max(0, ev.capacity - already);
+    if (qty > remaining) {
+      return bad(res, 409, `Only ${remaining} seats remaining for this event`);
     }
 
-    if (req.method === "POST") {
-      const user = await getUserFromHeaders(req);
-      if (!user) return res.status(401).json({ error: "Not authenticated" });
+    // derive contact fields if caller didn't send
+    const defaultName =
+      (userFirst || userLast)
+        ? [userFirst, userLast].filter(Boolean).join(" ").trim()
+        : fallbackNameFromEmail(userEmail);
+    const finalContactName = body.contactName ?? defaultName ?? null;
+    const finalContactEmail = body.contactEmail ?? userEmail ?? null;
 
-      const body = await readJsonBody(req);
-      const rating = sanitizeRating(body?.rating);
-      const title: string | null = (body?.title ?? null) || null;
-      const text: string = (body?.body || "").toString().trim();
+    // compute total
+    const totalCost = ev.price * qty;
 
-      if (!rating) return res.status(400).json({ error: "Rating must be 1–5" });
-      if (!text) return res.status(400).json({ error: "Review text required" });
+    const booking = await prisma.eventBooking.create({
+      data: {
+        userId,
+        eventId: ev.id,
+        qty,
+        totalCost,
+        contactName: finalContactName,
+        contactEmail: finalContactEmail,
+      },
+      select: {
+        id: true,
+        eventId: true,
+        userId: true,
+        qty: true,
+        totalCost: true,
+        contactName: true,
+        contactEmail: true,
+        createdAt: true,
+      },
+    });
 
-      // 1 review per (eventId, userId)
-      const review = await prisma.eventReview.upsert({
-        where: { eventId_userId: { eventId, userId: user.id } },
-        update: { rating, title, body: text },
-        create: { eventId, userId: user.id, rating, title, body: text },
-        include: { user: { select: { firstName: true, lastName: true, email: true } } },
-      });
-
-      const agg = await prisma.eventReview.aggregate({
-        where: { eventId },
-        _avg: { rating: true },
-        _count: { _all: true },
-      });
-
-      return res.status(200).json({
-        review: {
-          id: review.id,
-          userId: review.userId,
-          rating: review.rating,
-          title: review.title,
-          body: review.body,
-          createdAt: review.createdAt,
-          user: pickUser(review.user),
-        },
-        reviewsAvg: agg._avg.rating ? Math.round(agg._avg.rating * 10) / 10 : null,
-        reviewsCount: agg._count._all ?? 0,
-      });
-    }
-
-    return res.status(405).json({ error: "Use GET or POST" });
+    return res.status(201).json({ ok: true, booking });
   } catch (e: any) {
-    console.error("GET/POST /api/events/[id] error:", e);
-    return res.status(500).json({ error: e?.message || "Server error" });
+    console.error("POST /api/event-bookings error:", e);
+    return bad(res, 500, e?.message || "Server error");
   }
 }
