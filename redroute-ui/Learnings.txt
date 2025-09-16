@@ -39,3 +39,7 @@ END
 $$;
 
 COMMIT;
+
+#How to check tables exist or not in PSQL:
+\d "HotelReview"
+\d "EventReview"
