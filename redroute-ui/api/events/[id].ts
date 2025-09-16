@@ -108,6 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!rating) return res.status(400).json({ error: "Rating must be 1–5" });
       if (!text) return res.status(400).json({ error: "Review text required" });
 
+      // 1 review per (eventId, userId)
       const review = await prisma.eventReview.upsert({
         where: { eventId_userId: { eventId, userId: user.id } },
         update: { rating, title, body: text },

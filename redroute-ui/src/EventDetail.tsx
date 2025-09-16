@@ -1,3 +1,4 @@
+// src/pages/EventDetail.tsx (or wherever your route component lives)
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CalendarDays, MapPin, Minus, Plus, CheckCircle2, ChevronLeft, Home, Star, Send } from "lucide-react";
@@ -32,7 +33,6 @@ type Review = {
   createdAt: string;
   user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
 };
-
 type EventItem = {
   id: number;
   name: string;
@@ -46,7 +46,6 @@ type EventItem = {
   reviewsAvg?: number | null;
   reviewsCount?: number | null;
 };
-
 type CreatedEventBooking = {
   id: number;
   eventId: number;
@@ -112,28 +111,23 @@ function Stars({ value, size = 16 }: { value: number; size?: number }) {
 function useCelebration() {
   const rafRef = useRef<number | null>(null);
   const flipRef = useRef(0);
-
   function stop() {
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
   }
-
   function start(durationMs = 2800) {
     stop();
     const base = { startVelocity: 45, ticks: 200, zIndex: 9999 };
     const end = Date.now() + durationMs;
-
     const run = () => {
       const left = end - Date.now();
       if (left <= 0) return stop();
-
       const progress = left / durationMs;
       const particleCount = Math.max(6, Math.floor(35 * progress));
       const flip = (flipRef.current ^= 1);
       const rand = (a: number, b: number) => Math.random() * (b - a) + a;
-
       if (flip) {
         confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.05 } });
         confetti({ ...base, particleCount, spread: 70, origin: { x: 0.95, y: 0.95 } });
@@ -143,13 +137,10 @@ function useCelebration() {
         confetti({ ...base, particleCount, spread: 70, origin: { x: 0.05, y: 0.95 } });
         confetti({ ...base, particleCount: Math.ceil(particleCount * 0.8), spread: 110, origin: { x: rand(0.2, 0.8), y: 1 } });
       }
-
       rafRef.current = requestAnimationFrame(run);
     };
-
     rafRef.current = requestAnimationFrame(run);
   }
-
   useEffect(() => stop, []);
   return { start, stop };
 }
@@ -196,38 +187,33 @@ export default function EventDetail() {
     })();
   }, []);
 
-  // Load event + reviews (single call). If your backend doesn't include reviews yet, we
-  // fall back to /api/events/:id/reviews.
+  // Load event + reviews from one endpoint
   useEffect(() => {
     (async () => {
       if (!id) return;
       setLoading(true);
       setRevLoading(true);
+      setRevErr(null);
       try {
         const r = await fetch(`/api/events/${id}`, { credentials: "include" });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const e: EventItem = await r.json();
-        setEv(e);
-
-        if (Array.isArray(e?.reviews)) {
-          setReviews(e.reviews);
-          setRevErr(null);
-        } else {
-          // fallback if you keep a sub-route
-          const r2 = await fetch(`/api/events/${id}/reviews`, { credentials: "include" });
-          if (r2.ok) {
-            const data: Review[] = await r2.json();
-            setReviews(Array.isArray(data) ? data : []);
-            setRevErr(null);
+        const isJson = (r.headers.get("content-type") || "").includes("application/json");
+        if (!r.ok) {
+          // 404 maps to "Event not found" UI
+          setEv(null);
+          if (isJson) {
+            const p = await r.json().catch(() => null);
+            setRevErr(p?.error || `HTTP ${r.status}`);
           } else {
-            setReviews([]);
-            setRevErr(null);
+            setRevErr(`HTTP ${r.status}`);
           }
+          return;
         }
+        const e: EventItem = isJson ? await r.json() : await r.json();
+        setEv(e);
+        setReviews(Array.isArray(e.reviews) ? e.reviews : []);
       } catch (err: any) {
         setEv(null);
-        setReviews([]);
-        setRevErr(err?.message || "Failed to load reviews");
+        setRevErr(err?.message || "Failed to load event");
       } finally {
         setLoading(false);
         setRevLoading(false);
@@ -294,13 +280,11 @@ export default function EventDetail() {
         body: JSON.stringify({ rating, title: title || null, body }),
       });
 
-      const isJson = (resp.headers.get("content-type") || "").includes("application/json");
-      const payload = isJson ? await resp.json().catch(() => null) : null;
+      const payload = await resp.json().catch(() => null);
       if (!resp.ok) throw new Error(payload?.error || `HTTP ${resp.status}`);
 
       const created: Review = payload?.review ?? payload;
-
-      // upsert by userId (one review per user per event)
+      // upsert by userId (one per user per event)
       setReviews((prev) => {
         const rest = prev.filter((x) => x.userId !== created.userId);
         return [created, ...rest];
@@ -374,7 +358,7 @@ export default function EventDetail() {
                     {booking?.contactEmail ? <>A confirmation email was sent to <strong>{booking.contactEmail}</strong>.</> : null}
                   </div>
                   <div className="mt-2 text-xs text-white/70">
-                    Reference: <span className="font-mono">{booking?.id ?? "—"}</span> • Qty: {booking?.qty ?? qty} • Paid: ${ (booking?.totalCost ?? subtotal).toLocaleString() }
+                    Reference: <span className="font-mono">{booking?.id ?? "—"}</span> • Qty: {booking?.qty ?? qty} • Paid: ${(booking?.totalCost ?? subtotal).toLocaleString()}
                   </div>
                 </div>
               </div>
@@ -404,11 +388,7 @@ export default function EventDetail() {
                     title={`${n} star${n > 1 ? "s" : ""}`}
                     className="hover:scale-105 transition"
                   >
-                    <Star
-                      className="h-6 w-6"
-                      stroke="currentColor"
-                      fill={n <= rating ? "currentColor" : "none"}
-                    />
+                    <Star className="h-6 w-6" stroke="currentColor" fill={n <= rating ? "currentColor" : "none"} />
                   </button>
                 ))}
                 <span className="text-sm text-white/70">{rating} / 5</span>
