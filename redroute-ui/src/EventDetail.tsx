@@ -23,16 +23,6 @@ function authHeadersFrom(me: { id?: string | null; email?: string | null }) {
 }
 
 /* ------------ types ------------ */
-type Review = {
-  id: number;
-  userId: string;
-  rating: number;
-  title?: string | null;
-  body: string;
-  createdAt: string;
-  user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
-};
-
 type EventItem = {
   id: number;
   name: string;
@@ -42,18 +32,24 @@ type EventItem = {
   price: number;
   imageUrl: string;
   imageAlt?: string | null;
-  // (optional) server can embed these
-  reviews?: Review[];
-  reviewsAvg?: number | null;
-  reviewsCount?: number | null;
 };
-
 type CreatedEventBooking = {
   id: number;
   eventId: number;
   qty: number;
   totalCost: number;
   contactEmail?: string | null;
+};
+
+/* Reviews */
+type Review = {
+  id: number;
+  userId: string;
+  rating: number;
+  title?: string | null;
+  body: string;
+  createdAt: string;
+  user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
 };
 
 /* ------------ utils ------------ */
@@ -97,6 +93,7 @@ function Stars({ value, size = 16 }: { value: number; size?: number }) {
           fill={i < full ? "currentColor" : hasHalf && i === full ? "url(#half)" : "none"}
         />
       ))}
+      {/* gradient for half star */}
       <svg width="0" height="0">
         <defs>
           <linearGradient id="half">
@@ -109,7 +106,7 @@ function Stars({ value, size = 16 }: { value: number; size?: number }) {
   );
 }
 
-/* ------------ confetti hook ------------ */
+/* ------------ confetti hook (50% intensity, evenly spread) ------------ */
 function useCelebration() {
   const rafRef = useRef<number | null>(null);
   const flipRef = useRef(0);
@@ -157,9 +154,7 @@ function useCelebration() {
 
 /* ------------ page ------------ */
 export default function EventDetail() {
-  const { id: idParam } = useParams<{ id: string }>();
-  const id = idParam ?? ""; // normalize
-  const encodedId = encodeURIComponent(id);
+  const { id } = useParams();
   const navigate = useNavigate();
   const celebration = useCelebration();
 
@@ -199,47 +194,29 @@ export default function EventDetail() {
     })();
   }, []);
 
-  // Load event; hydrate reviews if server includes them
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        if (!id) throw new Error("Missing event id.");
-        const r = await fetch(`/api/events/${encodedId}`, { credentials: "include" });
-        const ct = r.headers.get("content-type") || "";
-        const text = await r.text();
-        const payload = ct.includes("application/json") && text ? JSON.parse(text) : null;
-        if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
-
-        const e: EventItem = payload;
+        const r = await fetch(`/api/events/${id}`, { credentials: "include" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const e: EventItem = await r.json();
         setEv(e);
-
-        if (Array.isArray(e?.reviews)) {
-          setReviews(e.reviews);
-          setRevErr(null);
-          setRevLoading(false);
-        }
-      } catch (e: any) {
+      } catch {
         setEv(null);
-        setRevLoading(false);
-        setRevErr(e?.message || null);
       } finally {
         setLoading(false);
       }
     })();
-  }, [id, encodedId]);
+  }, [id]);
 
-  // Load reviews ONLY if not already hydrated from main GET
+  // Load reviews
   useEffect(() => {
     (async () => {
       if (!id) return;
-      // if reviews already set from main GET, skip fallback
-      if (reviews.length) return;
-
       setRevLoading(true);
       try {
-        // fallback to sub-route
-        const r = await fetch(`/api/events/${encodedId}/reviews`, { credentials: "include" });
+        const r = await fetch(`/api/events/${id}/reviews`, { credentials: "include" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data: Review[] = await r.json();
         setReviews(Array.isArray(data) ? data : []);
@@ -250,14 +227,13 @@ export default function EventDetail() {
         setRevLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, encodedId]);
+  }, [id]);
 
   const avgRating = useMemo(() => {
-    if (!reviews.length) return ev?.reviewsAvg ?? null;
+    if (!reviews.length) return null;
     const sum = reviews.reduce((s, r) => s + (Number(r.rating) || 0), 0);
     return Math.round((sum / reviews.length) * 10) / 10;
-  }, [reviews, ev?.reviewsAvg]);
+  }, [reviews]);
 
   const subtotal = useMemo(() => (!ev ? 0 : ev.price * qty), [ev, qty]);
   const valid = !!ev && qty > 0;
@@ -289,6 +265,7 @@ export default function EventDetail() {
       setConfirmed(true);
       setMsg({ ok: true, text: "Tickets confirmed!" });
 
+      // fire confetti on success
       celebration.start(3000);
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Payment failed." });
@@ -305,33 +282,20 @@ export default function EventDetail() {
 
       setSubmitting(true);
       setFormMsg(null);
-
-      const postOnce = (url: string) =>
-        fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
-          credentials: "include",
-          body: JSON.stringify({ rating, title: title || null, body }),
-        });
-
-      // Prefer main route, fallback to /reviews if not supported
-      let resp = await postOnce(`/api/events/${encodedId}`);
-      if (!resp.ok && (resp.status === 404 || resp.status === 405)) {
-        resp = await postOnce(`/api/events/${encodedId}/reviews`);
-      }
-
-      const isJson = (resp.headers.get("content-type") || "").includes("application/json");
-      const payload = isJson ? await resp.json().catch(() => null) : null;
-      if (!resp.ok) throw new Error(payload?.error || `HTTP ${resp.status}`);
-
-      const created: Review = payload?.review ?? payload;
-
-      // upsert by userId (one per event per user)
-      setReviews(prev => {
-        const rest = prev.filter(x => x.userId !== created.userId);
-        return [created, ...rest];
+      const r = await fetch(`/api/events/${id}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeadersFrom(me) },
+        credentials: "include",
+        body: JSON.stringify({ rating, title: title || null, body }),
       });
 
+      const isJson = (r.headers.get("content-type") || "").includes("application/json");
+      const payload = isJson ? await r.json().catch(() => null) : null;
+      if (!r.ok) throw new Error(payload?.error || `HTTP ${r.status}`);
+
+      const created: Review = payload?.review ?? payload;
+      // optimistic refresh
+      setReviews((prev) => [created, ...prev]);
       setTitle("");
       setBody("");
       setRating(5);
